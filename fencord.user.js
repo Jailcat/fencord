@@ -6,8 +6,8 @@
 // @match        https://fenrid.com/*
 // @run-at       document-start
 // @grant        none
-// @updateURL    https://raw.githubusercontent.com/fencord/fencord/main/fencord.user.js
-// @downloadURL  https://raw.githubusercontent.com/fencord/fencord/main/fencord.user.js
+// @updateURL    https://raw.githubusercontent.com/Jailcat/fencord/main/fencord.user.js
+// @downloadURL  https://raw.githubusercontent.com/Jailcat/fencord/main/fencord.user.js
 // ==/UserScript==
 
 (function () {
