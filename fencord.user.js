@@ -3862,7 +3862,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
 
 
 
-  const CURRENT_VERSION = 70;
+  const CURRENT_VERSION = 101;
   // raw.githubusercontent.com refreshes ~every 5m; jsDelivr can lag much longer on @main.
   const SCRIPT_UPDATE_URL = 'https://github.com/fencord/fencord/raw/main/fencord.user.js';
   const REPO_PAGE_URL = 'https://github.com/fencord/fencord';
