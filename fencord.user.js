@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fencord
 // @namespace    fencord
-// @version      100
+// @version      101
 // @description  Theme manager for Fenrid
 // @match        https://fenrid.com/*
 // @run-at       document-start
@@ -658,7 +658,7 @@
 
   const STORAGE_KEY = 'fencord-active-theme';
   const CUSTOM_THEMES_KEY = 'fencord-custom-themes';
-  const CREDITS_TEXT = 'made by @123 and @702 on fenrid';
+  const CREDITS_TEXT = 'made by @kitty and @702 on fenrid';
 
   function makeCreditNote({ compact = false, maxWidth = '420px' } = {}) {
     const note = document.createElement('div');
@@ -1129,7 +1129,7 @@
         <button id="fencord-quick-save" style="flex:1;padding:10px;border-radius:6px;border:none;background:var(--primary-action);color:var(--primary-foreground);cursor:pointer;font-weight:bold;">Save</button>
         <button id="fencord-quick-cancel" style="flex:1;padding:10px;border-radius:6px;border:none;background:var(--secondary-button);color:var(--text-primary);cursor:pointer;">Cancel</button>
       </div>
-      <div style="font-size:11px;color:var(--text-muted);user-select:none;">made by @123 and @702 on fenrid</div>
+      <div style="font-size:11px;color:var(--text-muted);user-select:none;">made by @kitty and @702 on fenrid</div>
     `;
 
     modalOverlay.appendChild(box);
