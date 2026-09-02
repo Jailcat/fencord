@@ -658,7 +658,7 @@
 
   const STORAGE_KEY = 'fencord-active-theme';
   const CUSTOM_THEMES_KEY = 'fencord-custom-themes';
-  const CREDITS_TEXT = 'made by @kitty and @702 on fenrid';
+  const CREDITS_TEXT = 'made by @kitty and @704 on fenrid';
 
   function makeCreditNote({ compact = false, maxWidth = '420px' } = {}) {
     const note = document.createElement('div');
