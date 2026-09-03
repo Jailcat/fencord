@@ -16,4 +16,4 @@ Fencord versions are based on **commit count** — each commit increments the ve
 
 ## Current Version
 
-`100`
+`102`
