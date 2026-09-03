@@ -15,4 +15,4 @@ Download the latest `fencord.exe` from [Releases](https://github.com/Jailcat/fen
 ## Made by
 
 - [@Kitty](https://github.com/Jailcat)
-- [@704](https://github.com/704)
+- [@egwea](https://github.com/egwea)
