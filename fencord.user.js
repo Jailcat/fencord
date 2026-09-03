@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         Fencord
 // @namespace    fencord
-// @version      101
+// @version      102
 // @description  Theme manager for Fenrid
 // @match        https://fenrid.com/*
 // @run-at       document-start
-// @grant        none
+// @grant        GM_xmlhttpRequest
 // @updateURL    https://raw.githubusercontent.com/Jailcat/fencord/main/fencord.user.js
 // @downloadURL  https://raw.githubusercontent.com/Jailcat/fencord/main/fencord.user.js
 // ==/UserScript==
@@ -658,7 +658,7 @@
 
   const STORAGE_KEY = 'fencord-active-theme';
   const CUSTOM_THEMES_KEY = 'fencord-custom-themes';
-  const CREDITS_TEXT = 'made by @kitty and @704 on fenrid';
+  const CREDITS_TEXT = 'made by @kitty and @702 on fenrid';
 
   function makeCreditNote({ compact = false, maxWidth = '420px' } = {}) {
     const note = document.createElement('div');
@@ -2201,6 +2201,86 @@
         }
       });
       makePluginCard({
+        icon: '🌐',
+        title: 'Translate Messages',
+        desc: 'GUD GUD.',
+        enabled: isTranslateEnabled(),
+        onToggle: () => {
+          const next = !isTranslateEnabled();
+          setTranslateEnabled(next);
+          return next;
+        },
+        build: (controls, styleField) => {
+          const langSelect = document.createElement('select');
+          styleField(langSelect);
+          langSelect.style.cursor = 'pointer';
+          TRANSLATE_LANGUAGES.forEach(l => {
+            const opt = document.createElement('option');
+            opt.value = l.code;
+            opt.textContent = l.label;
+            langSelect.appendChild(opt);
+          });
+          langSelect.value = getTranslateLang();
+          langSelect.addEventListener('change', () => {
+            setTranslateLang(langSelect.value);
+            localStorage.removeItem(UI_TRANSLATIONS_CACHE_KEY);
+            showToast('Target: ' + getLangLabel(langSelect.value), { color: 'var(--success-green)', duration: 1400 });
+            if (isTranslateEnabled() && isUITranslationEnabled()) {
+              revertFencordUITranslation();
+              setTimeout(translateFencordUI, 200);
+            }
+          });
+          controls.appendChild(langSelect);
+
+          const uiToggleWrap = document.createElement('div');
+          Object.assign(uiToggleWrap.style, {
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: '10px', marginTop: '8px', padding: '8px 10px',
+            borderRadius: '6px', background: 'var(--hover-overlay)',
+            border: '1px solid var(--borders-and-separators)'
+          });
+          const uiLabel = document.createElement('span');
+          uiLabel.textContent = 'Translate Fencord UI';
+          Object.assign(uiLabel.style, { fontSize: '12px', fontWeight: '600', color: 'var(--text-primary)' });
+          const uiToggle = document.createElement('div');
+          const uiEnabled = isUITranslationEnabled();
+          Object.assign(uiToggle.style, {
+            width: '42px', height: '24px', borderRadius: '12px',
+            background: uiEnabled ? 'var(--primary-action)' : 'var(--borders-and-separators)',
+            position: 'relative', cursor: 'pointer', flexShrink: '0', transition: 'background 0.15s'
+          });
+          const uiKnob = document.createElement('div');
+          Object.assign(uiKnob.style, {
+            width: '18px', height: '18px', borderRadius: '50%', background: '#fff',
+            position: 'absolute', top: '3px', left: uiEnabled ? '21px' : '3px', transition: 'left 0.15s'
+          });
+          uiToggle.appendChild(uiKnob);
+          uiToggle.addEventListener('click', () => {
+            const next = !isUITranslationEnabled();
+            setUITranslationEnabled(next);
+            uiToggle.style.background = next ? 'var(--primary-action)' : 'var(--borders-and-separators)';
+            uiKnob.style.left = next ? '21px' : '3px';
+            if (next && isTranslateEnabled()) {
+              translateFencordUI();
+            } else if (!next) {
+              revertFencordUITranslation();
+              localStorage.removeItem(UI_TRANSLATIONS_CACHE_KEY);
+            }
+          });
+          uiToggleWrap.appendChild(uiLabel);
+          uiToggleWrap.appendChild(uiToggle);
+          controls.appendChild(uiToggleWrap);
+
+          const hint = document.createElement('div');
+          hint.textContent = 'Menu: 🌐 Translate Message (under Copy Text). Overlay shows source → target language.';
+          Object.assign(hint.style, {
+            fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px', fontStyle: 'italic', lineHeight: '1.4'
+          });
+          controls.appendChild(hint);
+        }
+      });
+
+      makePluginCard({
         icon: '🔌',
         title: 'Custom Plugin',
         desc: 'PASTE UR PLUGIN lol',
@@ -2568,6 +2648,9 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         tabBtn.addEventListener('click', () => {
           activeTab = tab.id;
           renderPanel();
+          if (isTranslateEnabled() && isUITranslationEnabled()) {
+            setTimeout(translateFencordUI, 350);
+          }
         });
         sidebar.appendChild(tabBtn);
       });
@@ -2594,18 +2677,29 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     }
 
     renderPanel();
-    refreshSettingsPanel = renderPanel;
+    refreshSettingsPanel = function() {
+      renderPanel();
+      if (isTranslateEnabled() && isUITranslationEnabled()) {
+        setTimeout(translateFencordUI, 350);
+      }
+    };
     openFavoritesTab = function () {
       activeTab = 'favorites';
       overlay.style.display = 'block';
       renderPanel();
+      if (isTranslateEnabled() && isUITranslationEnabled()) {
+        setTimeout(translateFencordUI, 350);
+      }
     };
 
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const isOpen = overlay.style.display !== 'none';
       overlay.style.display = isOpen ? 'none' : 'block';
-      if (!isOpen) renderPanel();
+      if (!isOpen) {
+        renderPanel();
+        if (isTranslateEnabled() && isUITranslationEnabled()) setTimeout(translateFencordUI, 400);
+      }
     });
   }
 
@@ -4614,6 +4708,605 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
   const CUSTOM_PLUGIN_KEY = 'fencord-custom-plugin-code';
   const CUSTOM_PLUGIN_ENABLED_KEY = 'fencord-custom-plugin-enabled';
   let customPluginCleanup = null;
+  const TRANSLATE_KEY = 'fencord-translate-enabled';
+  const TRANSLATE_LANG_KEY = 'fencord-translate-lang';
+  const UI_TRANSLATE_KEY = 'fencord-translate-ui-enabled';
+  const UI_TRANSLATIONS_CACHE_KEY = 'fencord-ui-trans-cache';
+  const UI_TRANSLATIONS_LANG_KEY = 'fencord-ui-trans-lang';
+  let translateMenuObserver = null;
+  let uiTranslationInProgress = false;
+
+  function isUITranslationEnabled() {
+    return localStorage.getItem(UI_TRANSLATE_KEY) === 'true';
+  }
+
+  function setUITranslationEnabled(enabled) {
+    localStorage.setItem(UI_TRANSLATE_KEY, enabled ? 'true' : 'false');
+  }
+
+  function getUITranslationsCache() {
+    try {
+      const cache = JSON.parse(localStorage.getItem(UI_TRANSLATIONS_CACHE_KEY) || '{}');
+      const cachedLang = localStorage.getItem(UI_TRANSLATIONS_LANG_KEY);
+      const currentLang = getTranslateLang();
+      if (cachedLang !== currentLang) return {};
+      return cache;
+    } catch (e) { return {}; }
+  }
+
+  function saveUITranslationsCache(cache) {
+    localStorage.setItem(UI_TRANSLATIONS_CACHE_KEY, JSON.stringify(cache));
+    localStorage.setItem(UI_TRANSLATIONS_LANG_KEY, getTranslateLang());
+  }
+
+  function shouldSkipUITranslationNode(node) {
+    const parent = node.parentElement;
+    if (!parent) return true;
+    const tag = parent.tagName.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'option' || tag === 'script' || tag === 'style' || tag === 'code') return true;
+    if (parent.isContentEditable) return true;
+    if (parent.closest('input, textarea, select, option, script, style, code, [contenteditable="true"]')) return true;
+    const text = node.textContent.trim();
+    if (text.length < 2 || text.length > 400) return true;
+    if (parent.dataset.fencordUiOriginal) return true;
+    if (parent.dataset.fencordTranslateRow) return true;
+    if (parent.id === 'fencord-update-toast') return true;
+    return false;
+  }
+
+  async function translateFencordUI() {
+    const overlay = document.getElementById('fencord-overlay');
+    if (!overlay || uiTranslationInProgress) return;
+    if (!isUITranslationEnabled()) return;
+    if (overlay.style.display === 'none') return;
+
+    uiTranslationInProgress = true;
+    const targetLang = getTranslateLang();
+    let cache = getUITranslationsCache();
+
+    const textNodes = [];
+    const walker = document.createTreeWalker(overlay, NodeFilter.SHOW_TEXT, null, false);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (shouldSkipUITranslationNode(node)) continue;
+      textNodes.push({ node: node, text: node.textContent.trim() });
+    }
+
+    const uniqueMap = new Map();
+    textNodes.forEach(item => {
+      if (!uniqueMap.has(item.text)) uniqueMap.set(item.text, []);
+      uniqueMap.get(item.text).push(item.node);
+    });
+
+    const uniqueTexts = Array.from(uniqueMap.keys());
+    const toTranslate = uniqueTexts.filter(t => !cache[t]);
+
+    if (toTranslate.length > 0) {
+      try {
+        const results = await Promise.all(
+          toTranslate.map(text => doGMTranslate(text, targetLang))
+        );
+        toTranslate.forEach((text, idx) => {
+          const res = results[idx];
+          cache[text] = (res.ok && res.text && res.text !== text) ? res.text : text;
+        });
+        saveUITranslationsCache(cache);
+      } catch (e) {
+        console.warn('[Fencord UI Translate] batch failed:', e);
+      }
+    }
+
+    textNodes.forEach(({ node, text }) => {
+      const translated = cache[text];
+      if (translated && translated !== text) {
+        node.textContent = translated;
+        if (node.parentElement) node.parentElement.dataset.fencordUiOriginal = text;
+      }
+    });
+
+    uiTranslationInProgress = false;
+  }
+
+  function revertFencordUITranslation() {
+    const overlay = document.getElementById('fencord-overlay');
+    if (!overlay) return;
+    overlay.querySelectorAll('[data-fencord-ui-original]').forEach(el => {
+      for (const child of el.childNodes) {
+        if (child.nodeType === Node.TEXT_NODE) {
+          child.textContent = el.dataset.fencordUiOriginal;
+          break;
+        }
+      }
+      delete el.dataset.fencordUiOriginal;
+    });
+  }
+
+  const TRANSLATE_LANGUAGES = [
+    { code: 'ar', label: 'Arabic' },
+    { code: 'en', label: 'English' },
+    { code: 'es', label: 'Spanish' },
+    { code: 'ja', label: 'Japanese' },
+    { code: 'fr', label: 'French' },
+    { code: 'de', label: 'German' },
+    { code: 'ru', label: 'Russian' },
+    { code: 'zh', label: 'Chinese' },
+    { code: 'ko', label: 'Korean' },
+    { code: 'pt', label: 'Portuguese' },
+    { code: 'it', label: 'Italian' },
+    { code: 'tr', label: 'Turkish' },
+    { code: 'hi', label: 'Hindi' },
+    { code: 'pl', label: 'Polish' },
+    { code: 'nl', label: 'Dutch' }
+  ];
+
+  function isTranslateEnabled() {
+    return localStorage.getItem(TRANSLATE_KEY) === 'true';
+  }
+
+  function translateFencordUI() {
+    const overlay = document.getElementById('fencord-overlay');
+    if (!overlay || overlay.dataset.fencordTranslating === 'true') return;
+    overlay.dataset.fencordTranslating = 'true';
+
+    const targetLang = getTranslateLang();
+
+    const walker = document.createTreeWalker(
+      overlay,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: function(node) {
+          const parent = node.parentElement;
+          if (!parent) return NodeFilter.FILTER_REJECT;
+          if (parent.closest('input, textarea, select, script, style')) return NodeFilter.FILTER_REJECT;
+          const text = node.textContent.trim();
+          if (text.length < 2 || text.length > 200) return NodeFilter.FILTER_REJECT;
+          if (parent.dataset.fencordUiOriginal) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      },
+      false
+    );
+
+    const nodes = [];
+    let node;
+    while ((node = walker.nextNode())) {
+      nodes.push({ el: node.parentElement, text: node.textContent.trim() });
+    }
+
+    nodes.forEach(({ el, text }, index) => {
+      el.dataset.fencordUiOriginal = text;
+      setTimeout(() => {
+        doGMTranslate(text, targetLang).then(result => {
+          if (result.ok && result.text && result.text !== text) {
+            const walker2 = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+            const firstText = walker2.nextNode();
+            if (firstText) firstText.textContent = result.text;
+          }
+        });
+      }, index * 80);
+    });
+
+    setTimeout(() => {
+      delete overlay.dataset.fencordTranslating;
+    }, nodes.length * 80 + 2000);
+  }
+
+  function setTranslateEnabled(enabled) {
+    localStorage.setItem(TRANSLATE_KEY, enabled ? 'true' : 'false');
+    if (enabled) startTranslate();
+    else stopTranslate();
+  }
+
+  function getTranslateLang() {
+    return localStorage.getItem(TRANSLATE_LANG_KEY) || 'ar';
+  }
+
+  function setTranslateLang(code) {
+    localStorage.setItem(TRANSLATE_LANG_KEY, code);
+  }
+
+  function getLangLabel(code) {
+    const found = TRANSLATE_LANGUAGES.find(l => l.code === code);
+    return found ? found.label : code;
+  }
+
+  function doGMTranslate(text, targetLang) {
+    return new Promise((resolve) => {
+      const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' + targetLang + '&dt=t&q=' + encodeURIComponent(text);
+
+      if (typeof GM_xmlhttpRequest !== 'function') {
+        resolve({ ok: false, error: 'GM API missing', text: null, sourceLang: null });
+        return;
+      }
+
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: url,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        onload: function(response) {
+          if (response.status !== 200) {
+            resolve({ ok: false, error: 'HTTP ' + response.status, text: null, sourceLang: null });
+            return;
+          }
+          const raw = response.responseText;
+          const clean = raw.replace(/^\)]}'\s*/, '');
+          let data;
+          try {
+            data = JSON.parse(clean);
+          } catch (e) {
+            resolve({ ok: false, error: 'Bad JSON', text: null, sourceLang: null });
+            return;
+          }
+          let out = '';
+          if (data && Array.isArray(data[0])) {
+            for (let i = 0; i < data[0].length; i++) {
+              if (data[0][i] && data[0][i][0]) out += data[0][i][0];
+            }
+          }
+          const sourceLang = (data && data[2]) ? data[2] : 'auto';
+          if (out && out !== text) {
+            resolve({ ok: true, error: null, text: out, sourceLang: sourceLang });
+          } else {
+            resolve({ ok: false, error: 'Empty or same', text: null, sourceLang: null });
+          }
+        },
+        onerror: function() {
+          resolve({ ok: false, error: 'Network error', text: null, sourceLang: null });
+        },
+        ontimeout: function() {
+          resolve({ ok: false, error: 'Timeout', text: null, sourceLang: null });
+        }
+      });
+    });
+  }
+
+  function openTranslatePopup(text, targetLang) {
+    const encoded = encodeURIComponent(text);
+    const url = `https://translate.google.com/?sl=auto&tl=${targetLang}&text=${encoded}&op=translate`;
+    window.open(url, '_blank', 'width=900,height=650,noopener,noreferrer');
+  }
+
+  function extractMessageText(el) {
+    let fullText = '';
+    try {
+      const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+      let n;
+      while ((n = w.nextNode())) {
+        const parent = n.parentElement;
+        if (!parent) continue;
+        if (parent.closest('time, button, a, [class*="avatar"], [class*="reaction"], [class*="emoji"], [class*="role"], [class*="badge"]')) continue;
+        if (parent.matches('time, button, a, span.font-semibold.cursor-pointer')) continue;
+        const t = n.textContent.trim();
+        if (t) {
+          if (fullText) fullText += ' ';
+          fullText += t;
+        }
+      }
+    } catch (e) {}
+    return fullText;
+  }
+
+  function getMessageTextRect(msgEl) {
+    let bestEl = null;
+    let bestLen = 0;
+    const walker = document.createTreeWalker(msgEl, NodeFilter.SHOW_TEXT, null, false);
+    let node;
+    while ((node = walker.nextNode())) {
+      const txt = node.textContent.trim();
+      if (txt.length > bestLen) {
+        const p = node.parentElement;
+        if (!p) continue;
+        if (p.closest('time, button, a, [class*="avatar"], [class*="reaction"], [class*="emoji"], [class*="role"], [class*="badge"]')) continue;
+        if (p.matches('time, button, a, span.font-semibold.cursor-pointer')) continue;
+        bestEl = p;
+        bestLen = txt.length;
+      }
+    }
+    return bestEl ? bestEl.getBoundingClientRect() : msgEl.getBoundingClientRect();
+  }
+  function showTranslateOverlay(msgEl, translated, sourceLang, targetLang) {
+    const existing = document.getElementById('fencord-translate-overlay');
+    if (existing) existing.remove();
+
+    const rect = getMessageTextRect(msgEl);
+    const overlay = document.createElement('div');
+    overlay.id = 'fencord-translate-overlay';
+
+    const sourceName = getLangLabel(sourceLang);
+    const targetName = getLangLabel(targetLang);
+
+    const header = document.createElement('div');
+    header.textContent = `🌐  ${sourceName} → ${targetName}`;
+    Object.assign(header.style, {
+      fontSize: '11px',
+      fontWeight: '700',
+      color: 'var(--primary-action, #89b4fa)',
+      marginBottom: '6px',
+      paddingBottom: '4px',
+      borderBottom: '1px solid var(--borders-and-separators, #313244)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      letterSpacing: '0.3px'
+    });
+
+    const body = document.createElement('div');
+    body.textContent = translated;
+    Object.assign(body.style, {
+      fontSize: '13px',
+      lineHeight: '1.6',
+      color: 'var(--text-primary, #cdd6f4)',
+      wordBreak: 'break-word',
+      whiteSpace: 'pre-wrap',
+      maxHeight: '50vh',
+      overflowY: 'auto',
+      overflowX: 'hidden'
+    });
+
+    const hint = document.createElement('div');
+    hint.textContent = 'Click anywhere to dismiss';
+    Object.assign(hint.style, {
+      fontSize: '10px',
+      color: 'var(--text-muted, #6c7086)',
+      marginTop: '8px',
+      textAlign: 'right',
+      fontStyle: 'italic'
+    });
+
+    overlay.appendChild(header);
+    overlay.appendChild(body);
+    overlay.appendChild(hint);
+
+    const isLong = translated.length > 120;
+    const overlayWidth = isLong ? 520 : Math.max(rect.width + 8, 320);
+    let left = isLong ? (window.innerWidth - overlayWidth) / 2 : rect.left;
+    let top = isLong ? 100 : rect.top - 4;
+
+    Object.assign(overlay.style, {
+      position: 'fixed',
+      left: left + 'px',
+      top: top + 'px',
+      width: overlayWidth + 'px',
+      maxWidth: '600px',
+      zIndex: '99999',
+      background: 'var(--popups-and-modals, #1e1e2e)',
+      border: '1px solid var(--borders-and-separators, #313244)',
+      borderRadius: '10px',
+      padding: '12px 14px',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+      fontFamily: 'inherit',
+      opacity: '0',
+      transform: 'translateY(4px)',
+      transition: 'opacity 0.2s ease, transform 0.2s ease',
+      pointerEvents: 'auto',
+      cursor: 'default'
+    });
+
+    document.documentElement.appendChild(overlay);
+
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+      overlay.style.transform = 'translateY(0)';
+    });
+
+    const autoHide = (e) => {
+      if (!overlay.contains(e.target)) {
+        overlay.style.opacity = '0';
+        overlay.style.transform = 'translateY(4px)';
+        setTimeout(() => overlay.remove(), 200);
+        document.removeEventListener('click', autoHide, true);
+        document.removeEventListener('scroll', autoHide, true);
+      }
+    };
+    setTimeout(() => {
+      document.addEventListener('click', autoHide, true);
+      document.addEventListener('scroll', autoHide, true);
+    }, 50);
+  }
+
+  function isFenridContextMenu(el) {
+    if (!el || el.nodeType !== 1) return false;
+    const txt = el.textContent || '';
+    return txt.includes('Copy Text') && (txt.includes('Reply') || txt.includes('Delete Message'));
+  }
+
+  function findMenuItemByText(menuEl, text) {
+    const items = menuEl.querySelectorAll('div, button, span, a');
+    for (let i = 0; i < items.length; i++) {
+      const t = items[i].textContent.trim();
+      if (t === text || t.includes(text)) return items[i];
+    }
+    return null;
+  }
+
+  function createNativeMenuRow({ icon, label, onClick, borderTop }) {
+    const row = document.createElement('div');
+    row.dataset.fencordTranslateRow = 'true';
+
+    // Icon
+    const iconEl = document.createElement('span');
+    iconEl.textContent = icon;
+    Object.assign(iconEl.style, {
+      fontSize: '14px',
+      width: '20px',
+      textAlign: 'center',
+      flexShrink: '0',
+      lineHeight: '1'
+    });
+
+    // Label
+    const labelEl = document.createElement('span');
+    labelEl.textContent = label;
+    Object.assign(labelEl.style, {
+      flex: '1',
+      fontSize: '13px',
+      fontWeight: '500'
+    });
+
+    row.appendChild(iconEl);
+    row.appendChild(labelEl);
+
+    Object.assign(row.style, {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      padding: '8px 12px',
+      cursor: 'pointer',
+      color: 'var(--text-primary, #cdd6f4)',
+      fontFamily: 'inherit',
+      transition: 'background-color 0.12s ease',
+      userSelect: 'none',
+      borderTop: borderTop ? '1px solid var(--borders-and-separators, #313244)' : 'none',
+      opacity: '1',
+      backgroundColor: 'transparent'
+    });
+
+    row.onmouseenter = () => {
+      row.style.backgroundColor = 'var(--hover-overlay, rgba(255,255,255,0.05))';
+    };
+    row.onmouseleave = () => {
+      row.style.backgroundColor = 'transparent';
+    };
+
+    row.addEventListener('click', onClick);
+    return row;
+  }
+
+  function injectTranslateRow(menuEl, msgEl, text) {
+    if (!menuEl || !msgEl) return;
+    if (menuEl.querySelector('[data-fencord-translate-row]')) return;
+
+    const targetLang = getTranslateLang();
+    const isTranslated = !!msgEl.dataset.fencordTranslatedMessage;
+    const copyTextItem = findMenuItemByText(menuEl, 'Copy Text');
+    const copyLinkItem = findMenuItemByText(menuEl, 'Copy Link');
+
+    const row = createNativeMenuRow({
+      icon: '🌐',
+      label: isTranslated ? 'Show Original' : 'Translate Message',
+      borderTop: true,
+      onClick: async (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+
+        row.remove();
+
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+        if (isTranslated) {
+          delete msgEl.dataset.fencordTranslatedMessage;
+          const existingOverlay = document.getElementById('fencord-translate-overlay');
+          if (existingOverlay) existingOverlay.remove();
+          showToast('Restored original', { color: 'var(--text-muted)', duration: 1500 });
+          return;
+        }
+
+        showToast('Translating...', { color: 'var(--primary-action)', duration: 3000 });
+        const result = await doGMTranslate(text, targetLang);
+
+        if (result.ok && result.text) {
+          msgEl.dataset.fencordTranslatedMessage = 'true';
+          showTranslateOverlay(msgEl, result.text, result.sourceLang, targetLang);
+          showToast(`Translated: ${getLangLabel(result.sourceLang)} → ${getLangLabel(targetLang)}`, { color: 'var(--success-green)', duration: 2500 });
+        } else {
+          console.warn('[Fencord Translate] Failed:', result.error);
+          showToast('Opening Google Translate...', { color: 'var(--warning-yellow)', duration: 2000 });
+          openTranslatePopup(text, targetLang);
+        }
+      }
+    });
+
+    if (copyTextItem && copyLinkItem) {
+      menuEl.insertBefore(row, copyLinkItem);
+    } else if (copyTextItem && copyTextItem.nextElementSibling) {
+      menuEl.insertBefore(row, copyTextItem.nextElementSibling);
+    } else if (copyTextItem) {
+      menuEl.appendChild(row);
+    } else if (menuEl.firstElementChild) {
+      menuEl.insertBefore(row, menuEl.firstElementChild);
+    } else {
+      menuEl.appendChild(row);
+    }
+  }
+
+  function onTranslateContextMenu(e) {
+    if (!isTranslateEnabled()) return;
+
+    const msgEl = e.target.closest?.('[class*="message"], [data-message], .message, .msg, [class*="group"]');
+    if (!msgEl) return;
+
+    const text = extractMessageText(msgEl);
+    if (!text || text.length < 2) return;
+
+    const allDivs = document.querySelectorAll('div');
+    for (let i = allDivs.length - 1; i >= Math.max(0, allDivs.length - 15); i--) {
+      if (isFenridContextMenu(allDivs[i])) {
+        injectTranslateRow(allDivs[i], msgEl, text);
+        return;
+      }
+    }
+
+    if (translateMenuObserver) {
+      translateMenuObserver.disconnect();
+      translateMenuObserver = null;
+    }
+
+    let found = false;
+    translateMenuObserver = new MutationObserver((mutations) => {
+      if (found) return;
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (node.nodeType !== 1) continue;
+          if (isFenridContextMenu(node)) {
+            found = true;
+            injectTranslateRow(node, msgEl, text);
+            if (translateMenuObserver) {
+              translateMenuObserver.disconnect();
+              translateMenuObserver = null;
+            }
+            return;
+          }
+          const candidates = node.querySelectorAll ? node.querySelectorAll('div') : [];
+          for (const c of candidates) {
+            if (isFenridContextMenu(c)) {
+              found = true;
+              injectTranslateRow(c, msgEl, text);
+              if (translateMenuObserver) {
+                translateMenuObserver.disconnect();
+                translateMenuObserver = null;
+              }
+              return;
+            }
+          }
+        }
+      }
+    });
+
+    translateMenuObserver.observe(document.body, { childList: true, subtree: true });
+
+    setTimeout(() => {
+      if (translateMenuObserver) {
+        translateMenuObserver.disconnect();
+        translateMenuObserver = null;
+      }
+    }, 500);
+  }
+
+  function startTranslate() {
+    document.addEventListener('contextmenu', onTranslateContextMenu, true);
+  }
+
+  function stopTranslate() {
+    document.removeEventListener('contextmenu', onTranslateContextMenu, true);
+    if (translateMenuObserver) {
+      translateMenuObserver.disconnect();
+      translateMenuObserver = null;
+    }
+  }
+
 
 
   const DANGEROUS_PATTERNS = [
@@ -4682,7 +5375,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
   let contextMenuEl = null;
 
   function profilerShowRolesContextMenu(username, x, y) {
-    // Remove any existing context menu
     if (contextMenuEl) { contextMenuEl.remove(); contextMenuEl = null; }
 
     const roles = profilerFindAllRoles(username);
@@ -4693,13 +5385,11 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
 
     let html = '';
 
-    // Header
     html += '<div style="padding:10px 14px;border-bottom:1px solid var(--borders-and-separators);font-weight:700;font-size:13px;color:var(--text-primary);display:flex;align-items:center;gap:8px;">';
     html += '<span style="font-size:14px;">🎭</span>';
     html += profilerEscapeHtml(username);
     html += '</div>';
 
-    // Roles section
     if (roles.length > 0) {
       html += '<div style="padding:10px 14px;">';
       html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;font-weight:600;">Roles (' + roles.length + ')</div>';
@@ -4715,7 +5405,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       html += '<div style="padding:10px 14px;font-size:12px;color:var(--text-muted);font-style:italic;">No roles detected</div>';
     }
 
-    // Stats
     html += '<div style="padding:8px 14px;border-top:1px solid var(--borders-and-separators);display:flex;justify-content:space-between;align-items:center;">';
     html += '<span style="font-size:11px;color:var(--text-muted);">💬 Messages</span>';
     html += '<span style="font-size:12px;font-weight:700;color:var(--accent-vibrant);">' + msgCount + '</span>';
@@ -4742,8 +5431,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
 
     document.body.appendChild(menu);
     contextMenuEl = menu;
-
-    // Position
     const rect = menu.getBoundingClientRect();
     let left = x;
     let top = y;
@@ -4772,7 +5459,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
 
   function profilerOnContextMenu(e) {
     const target = e.target;
-    // Check if right-clicked on a username
     const usernameEl = target.closest('span.font-semibold.cursor-pointer');
     if (!usernameEl) return;
 
@@ -4791,7 +5477,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     }
   }
 
-  // Hook into startProfiler to add context menu listener
   const _originalStartProfiler = startProfiler;
   startProfiler = function() {
     _originalStartProfiler();
@@ -4987,7 +5672,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       const myName = getMyRealUsername();
 
       document.querySelectorAll('span.font-semibold.cursor-pointer').forEach(el => {
-        // Save original text once.
         if (!el.dataset.fencordHiderOriginal) {
           el.dataset.fencordHiderOriginal = el.textContent.trim();
         }
@@ -5003,8 +5687,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
           el.dataset.fencordHiderActive = '1';
           el.textContent = randomScramble(original.length || 6);
         } else if (el.dataset.fencordHiderActive === '1') {
-          // This element was previously scrambled but is no longer in scope
-          // (e.g. mode changed to 'mine' and this is someone else).
           delete el.dataset.fencordHiderActive;
           el.textContent = original;
         }
@@ -5023,8 +5705,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
   function setUsernameHiderMode(mode) {
     const clean = ALLOWED_HIDER_MODES.has(mode) ? mode : 'off';
     saveUsernameHiderMode(clean);
-
-    // Always revert first so we start fresh.
     revertUsernameHider();
 
     if (clean === 'off') {
@@ -5045,7 +5725,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
   }
 
   function init() {
-    // Prevent double initialization
     if (window.__fencordInitialized) return;
     Object.defineProperty(window, '__fencordInitialized', { value: true, enumerable: false, configurable: true });
 
@@ -5065,6 +5744,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     if (isCallTimerEnabled()) setCallTimerEnabled(true);
     initUsernameHider();
     initCustomPlugin();
+    if (isTranslateEnabled()) startTranslate();
     createFencordWatermark();
     startUpdateChecker();
     showBootDisclaimerToast();
