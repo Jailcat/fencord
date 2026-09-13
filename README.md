@@ -14,5 +14,6 @@ Download the latest `fencord.exe` from [Releases](https://github.com/Jailcat/fen
 
 ## Made by
 
-- [@Kitty](https://github.com/Jailcat)
+- [@ash](https://github.com/Jailcat)
 - [@egwea](https://github.com/egwea)
+- [willow - no fenrid account](https://github.com/willow-twink)
