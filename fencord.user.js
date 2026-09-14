@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fencord
 // @namespace    fencord
-// @version      103
+// @version      104
 // @description  Theme manager for Fenrid
 // @match        https://fenrid.com/*
 // @run-at       document-start
@@ -69,7 +69,6 @@
       if (url && isBlockedUrl(url)) {
         reportBlocked(url);
         this.__fencordBlocked = true;
-        // Point the request at nothing rather than letting it fire.
         return nativeOpen.call(this, method, 'about:blank');
       }
       return nativeOpen.apply(this, arguments);
@@ -88,8 +87,6 @@
       navigator.sendBeacon = mimicNative(wrappedBeacon, 'sendBeacon');
     }
 
-    // Expose the toast hook / counter without letting them show up in a
-    // for-in / Object.keys(window) scan of the page.
     Object.defineProperty(window, '__fencordShieldBlockedCount', {
       value: () => blockedCount, enumerable: false, configurable: true
     });
@@ -481,20 +478,15 @@
       vWrap.appendChild(clone);
       card.insertBefore(vWrap, card.children[2]);
 
-      // Click to expand video into fullscreen overlay (YouTube style)
-      // We MOVE the same clone element to preserve quality (no new video element)
       vWrap.addEventListener('click', (e) => {
         e.stopPropagation();
         if (document.getElementById('mc-video-overlay')) return;
 
-        // Pause the panel video first
         const wasPlaying = !clone.paused;
         clone.pause();
 
-        // Remember the wrapper so we can put the video back
         const originalWrap = vWrap;
 
-        // Create fullscreen overlay
         const overlay = document.createElement('div');
         overlay.id = 'mc-video-overlay';
         Object.assign(overlay.style, {
@@ -504,8 +496,6 @@
           opacity: '0', transition: 'opacity 0.2s ease'
         });
 
-        // Move the SAME clone to overlay (preserves quality, no re-buffering)
-        // GPU acceleration + best image rendering for crisp quality
         Object.assign(clone.style, {
           position: 'relative', top: 'auto', left: 'auto',
           width: '100vw', height: '100vh', objectFit: 'contain',
@@ -516,7 +506,6 @@
         clone.playsInline = false;
         if (wasPlaying) clone.play().catch(() => {});
 
-        // Close button (×) top-right
         const closeBtn = document.createElement('div');
         closeBtn.textContent = '✕';
         Object.assign(closeBtn.style, {
@@ -536,17 +525,14 @@
             clone.controls = false;
             clone.playsInline = true;
 
-            // Restore original panel styles
             Object.assign(clone.style, {
               position: 'absolute', top: '0', left: '0',
               width: '100%', height: '100%', objectFit: 'contain',
               borderRadius: '6px'
             });
 
-            // Move clone back to the panel wrapper
             originalWrap.appendChild(clone);
 
-            // Resume playing in panel if it was playing
             if (wasPlaying) clone.play().catch(() => {});
 
             overlay.remove();
@@ -568,7 +554,6 @@
         overlay.appendChild(closeBtn);
         document.body.appendChild(overlay);
 
-        // Animate overlay in only — no transform on video to avoid blur
         requestAnimationFrame(() => {
           overlay.style.opacity = '1';
           closeBtn.style.opacity = '0.7';
@@ -653,7 +638,6 @@
   }
 
   mcInstallHook();
-
 
 
   const STORAGE_KEY = 'fencord-active-theme';
@@ -763,8 +747,6 @@
     localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(obj));
   }
 
-  // Theme values are injected into a <style> block. Only allow plain colors so
-  // imports can't smuggle url()/(@)import/JS or break out of the declaration.
   const SAFE_THEME_VAR_NAME = /^--[a-z0-9-]+$/i;
   const SAFE_HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
   const SAFE_RGB_COLOR = /^rgba?\(\s*(?:(?:\d{1,3}|100%|\d{1,2}%)\s*,\s*){2}(?:\d{1,3}|100%|\d{1,2}%)(?:\s*,\s*(?:0|1|0?\.\d+|100%|\d{1,2}%))?\s*\)$/i;
@@ -778,7 +760,6 @@
     if (typeof value !== 'string') return false;
     const v = value.trim();
     if (!v || v.length > 64) return false;
-    // Hard reject anything that can fetch, import, execute, or break out of CSS.
     if (/url\s*\(|@import|expression\s*\(|javascript:|data:|behavior\s*:|-moz-binding|<|>|[{};\\]|\/\*|\*\//i.test(v)) {
       return false;
     }
@@ -919,7 +900,6 @@
     } else {
       const cleaned = sanitizeThemeVars(theme.vars || {});
       const vars = { ...cleaned.vars };
-      // Older cached themes may lack --matrix-rain; derive from accent.
       if (!vars['--matrix-rain']) {
         const fallback =
           vars['--accent-vibrant'] || vars['--primary-action'] || '#00ff00';
@@ -1171,10 +1151,7 @@
 
   function tickRgbColors() {
     const now = Date.now();
-    // Only target actual clickable username spans (they carry cursor-pointer),
-    // not the "font-semibold" date-divider spans that share the same base class.
     document.querySelectorAll('span.font-semibold.cursor-pointer').forEach((el, i) => {
-      // offset each username slightly so they don't all flash in sync
       const step = Math.floor((now / 600) + i) % rgbColors.length;
       el.style.setProperty('color', rgbColors[step], 'important');
       el.dataset.fencordRgb = '1';
@@ -1215,9 +1192,6 @@
     }
   }
 
-  // ---------------------------------------------------------------
-  // FENCORD SURGE BYPASS PLUGIN
-  // ---------------------------------------------------------------
 
   const SURGE_BYPASS_KEY = 'fencord-surge-bypass-enabled';
   let surgeBypassInterval = null;
@@ -1317,12 +1291,6 @@
     if (isSurgeBypassEnabled()) setSurgeBypassEnabled(true);
   }
 
-  // ---------------------------------------------------------------
-  // FONT PLUGIN
-  // Injects a Google Fonts <link> and applies the chosen font-family
-  // to the whole app via a !important style rule. Supports a preset
-  // list plus a custom Google Font name typed by the user.
-  // ---------------------------------------------------------------
 
   const FONT_KEY = 'fencord-active-font';
   const FONT_LINK_ID = 'fencord-font-link';
@@ -1337,7 +1305,6 @@
     { id: 'couriernew', label: 'Courier New', family: "'Courier New', Courier, monospace", googleName: null }
   ];
 
-  // Plugin string safety: fonts/names are injected into CSS or URLs.
   function isSafeFontFamily(family) {
     if (family == null) return true;
     if (typeof family !== 'string') return false;
@@ -1353,7 +1320,6 @@
     const v = name.trim();
     if (!v || v.length > 80) return false;
     if (/url\s*\(|https?:|\/\/|<|>|[{}\\'"]/i.test(v)) return false;
-    // e.g. Inter:wght@400;600;700 or Press+Start+2P
     return /^[A-Za-z0-9]+(?:[+ ][A-Za-z0-9]+)*(?::wght@[0-9;]+)?$/.test(v);
   }
 
@@ -1441,7 +1407,6 @@
       link.rel = 'stylesheet';
       document.head.appendChild(link);
     }
-    // Keep Google's expected family=Name:wght@... shape; value is allowlisted above.
     link.href = `https://fonts.googleapis.com/css2?family=${googleName}&display=swap`;
   }
 
@@ -1510,21 +1475,16 @@
 
 
   function createSettingsUI() {
-    // Guard: if button already exists and is in DOM, just ensure overlay exists
     const existingBtn = document.getElementById('fencord-btn');
     const existingOverlay = document.getElementById('fencord-overlay');
 
     if (existingBtn && existingBtn.isConnected && existingOverlay && existingOverlay.isConnected) {
-      // Already initialized, just refresh the panel if needed
       if (typeof refreshSettingsPanel === 'function') refreshSettingsPanel();
       return;
     }
 
-    // The gear Settings button doesn't exist on the mobile layout (settings
-    // is a full page there), so it's optional — we build our own row button.
     const settingsBtn = document.querySelector('button[title="Settings"]');
 
-    // Remove old elements if they exist but are detached (cleanup)
     if (existingBtn && !existingBtn.isConnected) existingBtn.remove();
     if (existingOverlay && !existingOverlay.isConnected) existingOverlay.remove();
 
@@ -1534,7 +1494,6 @@
       const svg = btn.querySelector('svg');
       if (svg) svg.outerHTML = '🛠️';
     } else {
-      // Build a row that matches the mobile settings list (icon + label + ›)
       btn = document.createElement('button');
       btn.type = 'button';
       const iconEl = document.createElement('span');
@@ -1561,63 +1520,10 @@
     btn.id = 'fencord-btn';
     btn.title = `Fencord Settings — ${CREDITS_TEXT}`;
 
-    // Mobile-friendly placement: park the Fencord button directly under the
-    // "Connections" row in the settings sidebar (the <button> whose label is
-    // exactly "Connections"). Falls back to "Language", then to sitting
-    // before the Settings button — and keeps retrying so the button is MOVED
-    // under "Connections" as soon as the settings page actually renders.
-    function normalizeText(t) {
-      return String(t || '').replace(/\s+/g, ' ').trim();
-    }
-
-    function findSidebarRow(labels) {
-      const wanted = (Array.isArray(labels) ? labels : [labels]).map(normalizeText);
-      // Only row-level elements — never inner spans — so we insert the button
-      // as a sibling of the row, not inside it.
-      const items = document.querySelectorAll('button, a, [role="button"], li');
-      for (let i = 0; i < items.length; i++) {
-        const el = items[i];
-        if (el.childElementCount > 6) continue;
-        if (wanted.includes(normalizeText(el.textContent))) return el;
-      }
-      return null;
-    }
-
-    function placeBtnUnder(row) {
-      if (!row || !row.parentElement) return false;
-      // Match the row layout of the other sidebar items on mobile
-      btn.style.width = '100%';
-      btn.style.justifyContent = 'flex-start';
-      row.parentElement.insertBefore(btn, row.nextSibling);
-      return true;
-    }
-
-    function findConnectionsRow() {
-      return (
-        findSidebarRow(['Connections', 'Connection']) ||
-        findSidebarRow('Language')
-      );
-    }
-
-    let anchorItem = findConnectionsRow();
-    if (!anchorItem && settingsBtn && settingsBtn.parentElement) {
+    if (settingsBtn && settingsBtn.parentElement) {
       settingsBtn.parentElement.insertBefore(btn, settingsBtn);
     }
 
-    // The settings page often mounts after we first run — poll briefly and
-    // move the button under "Connections" the moment the row exists.
-    let placeTries = 0;
-    const placeInterval = setInterval(() => {
-      anchorItem = findConnectionsRow();
-      if (anchorItem) {
-        placeBtnUnder(anchorItem);
-        clearInterval(placeInterval);
-      } else if (++placeTries >= 30) { // ~15s then give up
-        clearInterval(placeInterval);
-      }
-    }, 500);
-
-    // --- full-screen overlay ---
     let overlay = document.getElementById('fencord-overlay');
     if (!overlay) {
       overlay = document.createElement('div');
@@ -1633,7 +1539,6 @@
       });
       document.body.appendChild(overlay);
     } else {
-      // Clear existing content to rebuild
       overlay.innerHTML = '';
     }
 
@@ -1858,7 +1763,6 @@
       body.appendChild(actionsRow);
 
 
-      // --- Background Effect (Matrix / Rain / Fire) ---
       const fxDivider = document.createElement('div');
       Object.assign(fxDivider.style, { borderTop: '1px solid var(--borders-and-separators)', margin: '20px 0', maxWidth: '420px' });
       body.appendChild(fxDivider);
@@ -2226,7 +2130,6 @@
         return card;
       }
 
-      // --- Group 1: Visual & Display Toggles ---
       makePluginCard({
         icon: '🌈',
         title: 'RGB Usernames',
@@ -2251,7 +2154,6 @@
         }
       });
 
-      // --- Group 2: UI & Media Controls ---
       makePluginCard({
         icon: '✨',
         title: 'UI Animations',
@@ -2276,7 +2178,6 @@
         }
       });
 
-      // --- Group 3: Time & Call Trackers ---
       makePluginCard({
         icon: '⏱️',
         title: 'Call Timer',
@@ -2337,11 +2238,10 @@
       });
 
 
-      // --- Group 4: Profile & Identity Enhancements ---
       makePluginCard({
         icon: '⚡',
         title: 'suger',
-        desc: 'fakesuger',
+        desc: 'fake suger ',
         badge: '67',
         enabled: isSurgeBypassEnabled(),
         onToggle: () => {
@@ -2387,7 +2287,6 @@
         }
       });
 
-      // --- Group 5: Audio & Localization ---
       makePluginCard({
         icon: '🔊',
         title: 'Soft Tap Sounds',
@@ -2528,7 +2427,6 @@
         }
       });
 
-      // --- Group 6: Advanced & Security (Full Width) ---
       makePluginCard({
         icon: '🔌',
         title: 'Custom Plugin',
@@ -2674,7 +2572,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
   }
 });
 
-      // Settings cards (hidden in compact — toggles-only view)
       if (!pluginsCompact) {
       makePluginCard({
         icon: '🔤',
@@ -2961,7 +2858,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       const fencordBtn = document.getElementById('fencord-btn');
       const settingsBtn = document.querySelector('button[title="Settings"]');
 
-      // If Settings button exists but Fencord button is missing or detached from DOM
       if (settingsBtn && (!fencordBtn || !fencordBtn.isConnected)) {
         createSettingsUI();
       }
@@ -2973,11 +2869,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     });
   }
 
-  // DISPLAY NAME OVERRIDE (local only)
-  // Replaces your own username text in the DOM with a custom name.
-  // Purely cosmetic and client-side; does not touch what's sent or
-  // what other users see.
-  // ---------------------------------------------------------------
 
   const DISPLAY_NAME_KEY = 'fencord-display-name-override';
   const ORIGINAL_NAME_KEY = 'fencord-original-name-cache';
@@ -3006,7 +2897,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     if (!override) return;
 
     const myOriginal = getMyRealUsername();
-    if (!myOriginal) return; // haven't learned the real name yet, skip safely
+    if (!myOriginal) return;
 
     document.querySelectorAll('span.font-semibold.cursor-pointer').forEach(el => {
       if (el.dataset.fencordNameOverridden === '1') return;
@@ -3042,21 +2933,15 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     }
   }
 
-  // Try to learn the user's real username automatically. Best-effort:
-  // looks for the account panel near the settings/mute buttons (the
-  // bottom-left user bar), which reliably shows your own display name.
   function tryDetectRealUsername(attemptsLeft = 10) {
     if (getMyRealUsername()) return;
 
     const settingsBtn = document.querySelector('button[title="Settings"]');
     if (!settingsBtn) {
-      // Settings button may not be mounted yet on first paint; retry briefly,
-      // mirroring createSettingsUI's own retry loop.
       if (attemptsLeft > 0) setTimeout(() => tryDetectRealUsername(attemptsLeft - 1), 1000);
       return;
     }
 
-    // walk up to the user panel container and look for a name-like span
     let panel = settingsBtn.closest('div');
     for (let i = 0; i < 4 && panel; i++) {
       const nameSpan = panel.querySelector('span.font-semibold');
@@ -3069,15 +2954,9 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       panel = panel.parentElement;
     }
 
-    // Found the button but no name span nearby this time — worth one more
-    // try in case the panel renders its contents a moment later.
     if (attemptsLeft > 0) setTimeout(() => tryDetectRealUsername(attemptsLeft - 1), 1000);
   }
 
-  // ---------------------------------------------------------------
-  // TIMESTAMP FORMAT PLUGIN
-  // Reformats message timestamps to 12h, 24h, or relative ("5m ago").
-  // ---------------------------------------------------------------
 
   const TIMESTAMP_FORMAT_KEY = 'fencord-timestamp-format';
   const ALLOWED_TIMESTAMP_FORMATS = new Set(['default', '12h', '24h', 'relative']);
@@ -3118,7 +2997,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     if (fmt === 'relative') {
       return formatRelative(date);
     }
-    return null; // 'default' = leave untouched
+    return null;
   }
 
   function tickTimestamps() {
@@ -3159,7 +3038,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
 
     tickTimestamps();
     if (!timestampInterval) {
-      // re-tick periodically so "relative" times keep counting up
       timestampInterval = setInterval(tickTimestamps, 30000);
     }
     if (!timestampObserver) {
@@ -3173,11 +3051,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     if (fmt !== 'default') setTimestampFormat(fmt);
   }
 
-  // ---------------------------------------------------------------
-  // IMAGE SPOILER / BLUR PLUGIN
-  // Blurs image attachments until clicked. Purely visual (CSS filter
-  // + click-to-reveal), doesn't stop images from loading.
-  // ---------------------------------------------------------------
 
   const IMAGE_BLUR_KEY = 'fencord-blur-images';
   let imageBlurObserver = null;
@@ -3187,19 +3060,15 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
   }
 
   function shouldSkipBlur(img) {
-    // Use rendered size first (available immediately, even pre-load) as a
-    // fast skip for obviously-small elements like avatars/emoji.
     const renderedWidth = img.width || img.clientWidth || 0;
     const renderedHeight = img.height || img.clientHeight || 0;
     if (renderedWidth && renderedWidth < 64) return true;
     if (renderedHeight && renderedHeight < 64) return true;
 
-    // If the image has already finished loading, we can trust naturalWidth.
     if (img.complete && img.naturalWidth) {
       return img.naturalWidth < 64;
     }
 
-    // Not loaded yet and no rendered size to go on — don't decide yet.
     return null;
   }
 
@@ -3235,8 +3104,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         return;
       }
 
-      // skip === null: size unknown yet, wait for the image to actually load
-      // then decide for real, instead of guessing based on naturalWidth === 0.
       if (!img.dataset.fencordBlurPending) {
         img.dataset.fencordBlurPending = '1';
         img.addEventListener('load', () => {
@@ -3283,10 +3150,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     }
   }
 
-  // ---------------------------------------------------------------
-  // SOFT TAP SOUNDS PLUGIN
-  // Quiet synthesized taps on keypress and click (Web Audio — no files).
-  // ---------------------------------------------------------------
 
   const SOFT_TAPS_KEY = 'fencord-soft-taps';
   const SOFT_TAP_STYLE_KEY = 'fencord-soft-tap-style';
@@ -3523,15 +3386,10 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
   }
 
 
-
-
-
-
-
   const BG_EFFECT_KEY = 'fencord-bg-effect';
-  const MATRIX_BG_KEY = 'fencord-matrix-bg'; // legacy
-  const RAIN_BG_KEY = 'fencord-rain-bg'; // legacy
-  const FIRE_BG_KEY = 'fencord-fire-bg'; // legacy
+  const MATRIX_BG_KEY = 'fencord-matrix-bg';
+  const RAIN_BG_KEY = 'fencord-rain-bg';
+  const FIRE_BG_KEY = 'fencord-fire-bg';
   const EFFECTS_CACHE_KEY = 'fencord-remote-effects';
   const CLIENT_EFFECT_ENGINES = new Set(['matrix', 'rain', 'fire']);
 
@@ -3578,7 +3436,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
   function getBackgroundEffect() {
     const saved = localStorage.getItem(BG_EFFECT_KEY);
     if (saved && isKnownEffectId(saved)) return saved;
-    // Migrate old per-effect toggles.
     if (localStorage.getItem(MATRIX_BG_KEY) === 'true') return 'matrix';
     if (localStorage.getItem(RAIN_BG_KEY) === 'true') return 'rain';
     if (localStorage.getItem(FIRE_BG_KEY) === 'true') return 'fire';
@@ -3772,7 +3629,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         ctx.globalAlpha = d.alpha;
         ctx.lineWidth = d.thickness;
         ctx.beginPath();
-        // Slight diagonal like wind-blown rain
         ctx.moveTo(d.x, d.y);
         ctx.lineTo(d.x - d.len * 0.15, d.y + d.len);
         ctx.stroke();
@@ -3877,7 +3733,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     function draw() {
       if (!document.getElementById(FIRE_CANVAS_ID)) return;
 
-      // Soft fade so trails look like heat haze
       ctx.globalCompositeOperation = 'source-over';
       ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -3899,7 +3754,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         }
 
         const t = Math.max(0, Math.min(1, p.life));
-        // Blend core → accent → tip as the ember rises / dies
         const color = t > 0.66 ? colors.core : t > 0.33 ? colors.accent : colors.tip;
         ctx.globalAlpha = Math.min(1, t * 0.9);
         ctx.beginPath();
@@ -3939,20 +3793,16 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
   }
 
   function findVoiceConnectedLabel() {
-    // Exact Fenrid class set from their VoiceConnectedFooter (when present).
     for (const el of document.querySelectorAll('span.text-xs.font-semibold.text-blue-500')) {
       if (elementOwnText(el) === 'Voice Connected' || el.textContent.trim() === 'Voice Connected') {
         return el;
       }
     }
 
-    // Prefer leaf-ish spans whose own text is exactly the label.
     for (const el of document.querySelectorAll('span')) {
       if (elementOwnText(el) === 'Voice Connected') return el;
     }
 
-    // Last resort: a span/div whose full textContent is exactly the label
-    // (single-child wrappers). Skip large containers.
     for (const el of document.querySelectorAll('span, div')) {
       if (el.childElementCount > 2) continue;
       if (el.textContent.trim() === 'Voice Connected') return el;
@@ -3961,8 +3811,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
   }
 
   function isInCall() {
-    // Keep this strict — broad "Leave" / class*=disconnect matches cause
-    // false positives and a broken/flickering clock.
     if (findVoiceConnectedLabel()) return true;
     if (document.querySelector('button[title="Disconnect"]')) return true;
     if (document.querySelector('button[aria-label="Disconnect" i]')) return true;
@@ -4030,14 +3878,11 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     let el = document.getElementById(CALL_TIMER_EL_ID);
     const label = findVoiceConnectedLabel();
 
-    // Prefer sitting inline next to "Voice Connected".
     if (label && label.parentElement) {
       if (!el) {
         el = document.createElement('span');
         el.id = CALL_TIMER_EL_ID;
       } else if (el.tagName !== 'SPAN') {
-        // Reuse the same node id without destroying/recreating every tick:
-        // convert floating pill → inline span only when needed.
         const next = document.createElement('span');
         next.id = CALL_TIMER_EL_ID;
         next.textContent = el.textContent;
@@ -4133,6 +3978,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       }
     }
   }
+
 
   const CLOCK_TIME_KEY = 'fencord-clock-time-enabled';
   const CLOCK_TIME_FORMAT_KEY = 'fencord-clock-time-format';
@@ -4459,14 +4305,10 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     applyUiAnimations();
   }
 
-  // Init animations on startup
   applyUiAnimations();
 
 
-
-
-  const CURRENT_VERSION = 109;
-  // raw.githubusercontent.com refreshes ~every 5m; jsDelivr can lag much longer on @main.
+  const CURRENT_VERSION = 111;
   const SCRIPT_UPDATE_URL = 'https://github.com/fencord/fencord/raw/main/fencord.user.js';
   const REPO_PAGE_URL = 'https://github.com/fencord/fencord';
   const BUNDLED_THEMES = {"none":{"name":"None (Default)","vars":{}},"hotpink":{"name":"Hot Pink","vars":{"--background":"#2b0010","--foreground":"#ffffff","--server-sidebar":"#1a0009","--channel-sidebar":"#3d0016","--main-chat-area":"#2b0010","--member-list":"#1a0009","--popups-and-modals":"#3d0016","--borders-and-separators":"#ff0055","--primary-action":"#ff007f","--primary-hover":"#ff3399","--secondary-button":"#660033","--secondary-button-hover":"#99004d","--accent-vibrant":"#ff007f","--success-green":"#ff66aa","--error-red":"#ff0000","--warning-yellow":"#ff66aa","--text-primary":"#ffffff","--text-secondary":"#ffb3d1","--text-muted":"#ff80b3","--interactive-hover":"#ff007f","--hover-overlay":"#ff007f22","--active-overlay":"#ff007f33","--primary-foreground":"#ffffff","--matrix-rain":"#ff007f"}},"catppuccin":{"name":"Catppuccin Mocha","vars":{"--background":"#1e1e2e","--foreground":"#cdd6f4","--server-sidebar":"#181825","--channel-sidebar":"#1e1e2e","--main-chat-area":"#1e1e2e","--member-list":"#181825","--popups-and-modals":"#1e1e2e","--borders-and-separators":"#313244","--primary-action":"#89b4fa","--primary-hover":"#74a8f9","--secondary-button":"#313244","--secondary-button-hover":"#45475a","--accent-vibrant":"#89b4fa","--success-green":"#a6e3a1","--error-red":"#f38ba8","--warning-yellow":"#f9e2af","--text-primary":"#cdd6f4","--text-secondary":"#a6adc8","--text-muted":"#6c7086","--interactive-hover":"#89b4fa","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#1e1e2e","--matrix-rain":"#89b4fa"}},"dracula":{"name":"Dracula","vars":{"--background":"#282a36","--foreground":"#f8f8f2","--server-sidebar":"#21222c","--channel-sidebar":"#282a36","--main-chat-area":"#282a36","--member-list":"#21222c","--popups-and-modals":"#282a36","--borders-and-separators":"#44475a","--primary-action":"#bd93f9","--primary-hover":"#a679f2","--secondary-button":"#44475a","--secondary-button-hover":"#565a72","--accent-vibrant":"#ff79c6","--success-green":"#50fa7b","--error-red":"#ff5555","--warning-yellow":"#f1fa8c","--text-primary":"#f8f8f2","--text-secondary":"#bfbfd1","--text-muted":"#6272a4","--interactive-hover":"#bd93f9","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#282a36","--matrix-rain":"#ff79c6"}},"nord":{"name":"Nord","vars":{"--background":"#2e3440","--foreground":"#eceff4","--server-sidebar":"#242933","--channel-sidebar":"#2e3440","--main-chat-area":"#2e3440","--member-list":"#242933","--popups-and-modals":"#2e3440","--borders-and-separators":"#4c566a","--primary-action":"#88c0d0","--primary-hover":"#8fbcbb","--secondary-button":"#3b4252","--secondary-button-hover":"#434c5e","--accent-vibrant":"#81a1c1","--success-green":"#a3be8c","--error-red":"#bf616a","--warning-yellow":"#ebcb8b","--text-primary":"#eceff4","--text-secondary":"#d8dee9","--text-muted":"#7b88a1","--interactive-hover":"#88c0d0","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#2e3440","--matrix-rain":"#81a1c1"}},"gruvbox":{"name":"Gruvbox Dark","vars":{"--background":"#282828","--foreground":"#ebdbb2","--server-sidebar":"#1d2021","--channel-sidebar":"#282828","--main-chat-area":"#282828","--member-list":"#1d2021","--popups-and-modals":"#282828","--borders-and-separators":"#3c3836","--primary-action":"#fe8019","--primary-hover":"#fb923c","--secondary-button":"#3c3836","--secondary-button-hover":"#504945","--accent-vibrant":"#fabd2f","--success-green":"#b8bb26","--error-red":"#fb4934","--warning-yellow":"#fabd2f","--text-primary":"#ebdbb2","--text-secondary":"#d5c4a1","--text-muted":"#928374","--interactive-hover":"#fe8019","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#282828","--matrix-rain":"#fabd2f"}},"tokyonight":{"name":"Tokyo Night","vars":{"--background":"#1a1b26","--foreground":"#c0caf5","--server-sidebar":"#16161e","--channel-sidebar":"#1a1b26","--main-chat-area":"#1a1b26","--member-list":"#16161e","--popups-and-modals":"#1a1b26","--borders-and-separators":"#292e42","--primary-action":"#7aa2f7","--primary-hover":"#89b4fa","--secondary-button":"#292e42","--secondary-button-hover":"#3b4261","--accent-vibrant":"#bb9af7","--success-green":"#9ece6a","--error-red":"#f7768e","--warning-yellow":"#e0af68","--text-primary":"#c0caf5","--text-secondary":"#a9b1d6","--text-muted":"#565f89","--interactive-hover":"#7aa2f7","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#1a1b26","--matrix-rain":"#bb9af7"}},"vaporwave":{"name":"Vaporwave","vars":{"--background":"#241b2f","--foreground":"#f8f0fb","--server-sidebar":"#1a1424","--channel-sidebar":"#2b2038","--main-chat-area":"#241b2f","--member-list":"#1a1424","--popups-and-modals":"#2b2038","--borders-and-separators":"#553c7b","--primary-action":"#ff6ad5","--primary-hover":"#ff8ade","--secondary-button":"#3c2b52","--secondary-button-hover":"#513a6d","--accent-vibrant":"#8bd3ff","--success-green":"#94ffb3","--error-red":"#ff5c8a","--warning-yellow":"#ffd76a","--text-primary":"#f8f0fb","--text-secondary":"#d3b8e8","--text-muted":"#8d6fae","--interactive-hover":"#ff6ad5","--hover-overlay":"#ff6ad51a","--active-overlay":"#ff6ad526","--primary-foreground":"#241b2f","--matrix-rain":"#8bd3ff"}},"glitchcore":{"name":"Glitchcore","vars":{"--background":"#0a0a0f","--foreground":"#e0fbff","--server-sidebar":"#050507","--channel-sidebar":"#0f0f16","--main-chat-area":"#0a0a0f","--member-list":"#050507","--popups-and-modals":"#0f0f16","--borders-and-separators":"#ff00e5","--primary-action":"#00fff2","--primary-hover":"#5affee","--secondary-button":"#1a1a24","--secondary-button-hover":"#2a2a38","--accent-vibrant":"#ff00e5","--success-green":"#39ff14","--error-red":"#ff0037","--warning-yellow":"#faff00","--text-primary":"#e0fbff","--text-secondary":"#9be8ff","--text-muted":"#4d6b73","--interactive-hover":"#ff00e5","--hover-overlay":"#00fff21a","--active-overlay":"#ff00e526","--primary-foreground":"#0a0a0f","--matrix-rain":"#ff00e5"}},"digicore":{"name":"Digicore","vars":{"--background":"#12101c","--foreground":"#f1e8ff","--server-sidebar":"#0b0a13","--channel-sidebar":"#171425","--main-chat-area":"#12101c","--member-list":"#0b0a13","--popups-and-modals":"#171425","--borders-and-separators":"#3a2e5c","--primary-action":"#c77dff","--primary-hover":"#d896ff","--secondary-button":"#241f3a","--secondary-button-hover":"#332a52","--accent-vibrant":"#7dfff0","--success-green":"#7dffb0","--error-red":"#ff5c7a","--warning-yellow":"#ffe27d","--text-primary":"#f1e8ff","--text-secondary":"#c9b8ea","--text-muted":"#6b5a94","--interactive-hover":"#c77dff","--hover-overlay":"#c77dff1a","--active-overlay":"#c77dff26","--primary-foreground":"#12101c","--matrix-rain":"#7dfff0"}},"solarizedlight":{"name":"Solarized Light","vars":{"--background":"#fdf6e3","--foreground":"#073642","--server-sidebar":"#eee8d5","--channel-sidebar":"#fdf6e3","--main-chat-area":"#fdf6e3","--member-list":"#eee8d5","--popups-and-modals":"#fdf6e3","--borders-and-separators":"#d3cbb7","--primary-action":"#268bd2","--primary-hover":"#2aa1f0","--secondary-button":"#e4ddc8","--secondary-button-hover":"#d8d0b8","--accent-vibrant":"#2aa198","--success-green":"#859900","--error-red":"#dc322f","--warning-yellow":"#b58900","--text-primary":"#073642","--text-secondary":"#4c6b70","--text-muted":"#93a1a1","--interactive-hover":"#268bd2","--hover-overlay":"#00000012","--active-overlay":"#0000001e","--primary-foreground":"#fdf6e3","--matrix-rain":"#2aa198"}},"paperwhite":{"name":"Paper White","vars":{"--background":"#ffffff","--foreground":"#1a1a1a","--server-sidebar":"#f4f4f5","--channel-sidebar":"#ffffff","--main-chat-area":"#ffffff","--member-list":"#f4f4f5","--popups-and-modals":"#ffffff","--borders-and-separators":"#e2e2e5","--primary-action":"#3355ff","--primary-hover":"#5470ff","--secondary-button":"#eeeef0","--secondary-button-hover":"#e2e2e6","--accent-vibrant":"#3355ff","--success-green":"#1f9d55","--error-red":"#e0293e","--warning-yellow":"#c98a11","--text-primary":"#1a1a1a","--text-secondary":"#55555a","--text-muted":"#9a9aa0","--interactive-hover":"#3355ff","--hover-overlay":"#00000010","--active-overlay":"#0000001c","--primary-foreground":"#ffffff","--matrix-rain":"#3355ff"}},"midnightocean":{"name":"Midnight Ocean","vars":{"--background":"#031521","--foreground":"#dff4ff","--server-sidebar":"#020f18","--channel-sidebar":"#04202f","--main-chat-area":"#031521","--member-list":"#020f18","--popups-and-modals":"#04202f","--borders-and-separators":"#0d3d54","--primary-action":"#20b2c4","--primary-hover":"#37c8d9","--secondary-button":"#0a2c3d","--secondary-button-hover":"#0f3a4f","--accent-vibrant":"#3ee8e2","--success-green":"#4de1a4","--error-red":"#ff5c66","--warning-yellow":"#ffcf5c","--text-primary":"#dff4ff","--text-secondary":"#9fd4e6","--text-muted":"#4d7d90","--interactive-hover":"#20b2c4","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#031521","--matrix-rain":"#3ee8e2"}},"sunsetpeach":{"name":"Sunset Peach","vars":{"--background":"#2b1a1f","--foreground":"#ffe8dc","--server-sidebar":"#201316","--channel-sidebar":"#332026","--main-chat-area":"#2b1a1f","--member-list":"#201316","--popups-and-modals":"#332026","--borders-and-separators":"#5c3a3f","--primary-action":"#ff9770","--primary-hover":"#ffab8c","--secondary-button":"#452a30","--secondary-button-hover":"#593640","--accent-vibrant":"#ffc785","--success-green":"#a8d982","--error-red":"#ff6b6b","--warning-yellow":"#ffd166","--text-primary":"#ffe8dc","--text-secondary":"#e0b8ab","--text-muted":"#8c6a63","--interactive-hover":"#ff9770","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#2b1a1f","--matrix-rain":"#ffc785"}},"forestmoss":{"name":"Forest Moss","vars":{"--background":"#1a2419","--foreground":"#e6f1e3","--server-sidebar":"#131b12","--channel-sidebar":"#202d1f","--main-chat-area":"#1a2419","--member-list":"#131b12","--popups-and-modals":"#202d1f","--borders-and-separators":"#3b4f38","--primary-action":"#7fbf6b","--primary-hover":"#94d180","--secondary-button":"#2a3a28","--secondary-button-hover":"#374a34","--accent-vibrant":"#b4d97a","--success-green":"#7fbf6b","--error-red":"#e0655e","--warning-yellow":"#dcbb5c","--text-primary":"#e6f1e3","--text-secondary":"#b6ccb1","--text-muted":"#6b8266","--interactive-hover":"#7fbf6b","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#1a2419","--matrix-rain":"#b4d97a"}},"pastelcloud":{"name":"Pastel Cloud","vars":{"--background":"#f5f0fa","--foreground":"#4a3f5c","--server-sidebar":"#ece2f7","--channel-sidebar":"#f5f0fa","--main-chat-area":"#f5f0fa","--member-list":"#ece2f7","--popups-and-modals":"#f5f0fa","--borders-and-separators":"#dccdec","--primary-action":"#b09aef","--primary-hover":"#c1aef4","--secondary-button":"#e4d6f2","--secondary-button-hover":"#d8c6ec","--accent-vibrant":"#f6a6c1","--success-green":"#8fd6a8","--error-red":"#ef8a9c","--warning-yellow":"#f3d089","--text-primary":"#4a3f5c","--text-secondary":"#786b8c","--text-muted":"#ac9dc0","--interactive-hover":"#b09aef","--hover-overlay":"#00000010","--active-overlay":"#0000001c","--primary-foreground":"#ffffff","--matrix-rain":"#f6a6c1"}},"bloodmoon":{"name":"Blood Moon","vars":{"--background":"#160707","--foreground":"#ffe2e2","--server-sidebar":"#0d0404","--channel-sidebar":"#200a0a","--main-chat-area":"#160707","--member-list":"#0d0404","--popups-and-modals":"#200a0a","--borders-and-separators":"#5c1a1a","--primary-action":"#e0393f","--primary-hover":"#f04c52","--secondary-button":"#2e0f0f","--secondary-button-hover":"#421414","--accent-vibrant":"#ff6b6b","--success-green":"#7fbf6b","--error-red":"#ff2d2d","--warning-yellow":"#e0a13f","--text-primary":"#ffe2e2","--text-secondary":"#d19a9a","--text-muted":"#7a4a4a","--interactive-hover":"#e0393f","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#160707","--matrix-rain":"#ff6b6b"}},"monochrome":{"name":"Monochrome","vars":{"--background":"#141414","--foreground":"#eaeaea","--server-sidebar":"#0d0d0d","--channel-sidebar":"#1a1a1a","--main-chat-area":"#141414","--member-list":"#0d0d0d","--popups-and-modals":"#1a1a1a","--borders-and-separators":"#333333","--primary-action":"#d9d9d9","--primary-hover":"#ffffff","--secondary-button":"#242424","--secondary-button-hover":"#303030","--accent-vibrant":"#bfbfbf","--success-green":"#9ecb9e","--error-red":"#d97a7a","--warning-yellow":"#d9c47a","--text-primary":"#eaeaea","--text-secondary":"#a6a6a6","--text-muted":"#5c5c5c","--interactive-hover":"#d9d9d9","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#141414","--matrix-rain":"#bfbfbf"}}};
@@ -4495,7 +4337,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
   const BUNDLED_VERSION = 76;
   const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
-  let updateCheckResult = null; // { available: bool, latestVersion: string } | null while unknown
+  let updateCheckResult = null;
   let updateCheckInFlight = null;
   let updateToastDismissed = false;
   let themesLoadInFlight = null;
@@ -4508,7 +4350,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       if (!theme || typeof theme !== 'object') return false;
       if (typeof theme.name !== 'string') return false;
       if (!theme.vars || typeof theme.vars !== 'object') return false;
-      // Built-in/remote themes must also pass the color-only safety check.
       const cleaned = sanitizeThemeVars(theme.vars);
       if (Object.keys(theme.vars).length && !Object.keys(cleaned.vars).length) return false;
       if (cleaned.errors.length) return false;
@@ -4696,7 +4537,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     if (document.getElementById('fencord-update-toast')) return;
 
     const result = await checkForUpdate();
-    if (!result.available) return; // no nag if already up to date or check failed
+    if (!result.available) return;
 
     const banner = buildUpdateBanner({ dismissible: true });
     banner.id = 'fencord-update-toast';
@@ -4797,7 +4638,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       if (banner.parentElement) banner.remove();
     }, 10000);
   }
-
 
 
   const PROFILER_KEY = 'fencord-show-user-profile';
@@ -5022,25 +4862,32 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       html += '<div style="font-size:12px;color:var(--text-muted);font-style:italic;">No roles detected in current view</div>';
       html += '</div>';
     }
+
     html += '<div style="font-size:10px;color:var(--text-muted);text-align:center;border-top:1px solid var(--borders-and-separators);padding-top:10px;font-style:italic;">All data gathered from visible DOM only. No API requests made.</div>';
+
     modal.innerHTML = html;
     modal.appendChild(closeBtn);
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
+
     requestAnimationFrame(function() {
       overlay.style.opacity = '1';
       modal.style.transform = 'scale(1)';
     });
   }
+
   function profilerBuildTooltip(username, targetEl) {
     const tooltip = document.createElement('div');
     tooltip.id = 'fencord-profiler-tooltip';
+
     const avatarSrc = profilerFindAvatar(targetEl);
     const roles = profilerFindAllRoles(username);
     const msgCount = profilerMsgCounter.get(username) || 0;
     const firstSeen = profilerEstimateFirstSeen(username);
     const statusColor = profilerFindStatus(targetEl);
+
     let html = '';
+
     html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">';
     if (avatarSrc) {
       html += '<img src="' + profilerEscapeHtml(avatarSrc) + '" id="fencord-profiler-avatar" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0;cursor:pointer;transition:transform 0.15s;border:2px solid var(--borders-and-separators);" title="Click for full profile">';
@@ -5054,11 +4901,14 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     html += '</div>';
     html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Click avatar for full profile</div>';
     html += '</div></div>';
+
     html += '<div style="border-top:1px solid var(--borders-and-separators);padding-top:10px;display:flex;flex-direction:column;gap:6px;">';
+
     html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">';
     html += '<span style="color:var(--text-muted);">💬 Messages (session)</span>';
     html += '<span style="font-weight:700;color:var(--accent-vibrant);font-variant-numeric:tabular-nums;">' + msgCount + '</span>';
     html += '</div>';
+
     if (firstSeen) {
       const timeStr = firstSeen.toLocaleDateString() + ' ' + firstSeen.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">';
@@ -5066,6 +4916,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       html += '<span style="font-weight:600;color:var(--text-secondary);font-variant-numeric:tabular-nums;">' + profilerEscapeHtml(timeStr) + '</span>';
       html += '</div>';
     }
+
     if (roles.length > 0) {
       html += '<div style="margin-top:4px;">';
       html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">🎭 Roles (' + roles.length + ')</div>';
@@ -5078,9 +4929,12 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       }
       html += '</div></div>';
     }
+
     html += '<div style="font-size:10px;color:var(--text-muted);margin-top:6px;font-style:italic;border-top:1px solid var(--borders-and-separators);padding-top:6px;">Session data only. No API calls.</div>';
     html += '</div>';
+
     tooltip.innerHTML = html;
+
     Object.assign(tooltip.style, {
       position: 'fixed', zIndex: '999999',
       background: 'var(--popups-and-modals)',
@@ -5094,6 +4948,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       transform: 'translateY(6px) scale(0.97)',
       transition: 'opacity 0.18s ease, transform 0.18s ease'
     });
+
     setTimeout(function() {
       const avatarEl = tooltip.querySelector('#fencord-profiler-avatar');
       if (avatarEl) {
@@ -5105,19 +4960,25 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         avatarEl.addEventListener('mouseleave', function() { avatarEl.style.transform = 'scale(1)'; avatarEl.style.borderColor = 'var(--borders-and-separators)'; });
       }
     }, 0);
+
     return tooltip;
   }
+
   function profilerOnMouseEnter(e) {
     const target = e.target;
     if (!target.matches('span.font-semibold.cursor-pointer')) return;
     if (profilerModalOpen) return;
+
     const username = target.textContent.trim();
     if (!username || username.length > 50) return;
+
     if (profilerHideTimer) { clearTimeout(profilerHideTimer); profilerHideTimer = null; }
     if (profilerTooltip) { profilerTooltip.remove(); profilerTooltip = null; }
+
     const tooltip = profilerBuildTooltip(username, target);
     document.body.appendChild(tooltip);
     profilerTooltip = tooltip;
+
     const rect = target.getBoundingClientRect();
     requestAnimationFrame(function() {
       const tooltipRect = tooltip.getBoundingClientRect();
@@ -5133,10 +4994,12 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       tooltip.style.transform = 'translateY(0) scale(1)';
     });
   }
+
   function profilerOnMouseLeave(e) {
     if (!profilerTooltip) return;
     const related = e.relatedTarget;
     if (profilerTooltip.contains(related)) return;
+
     profilerHideTimer = setTimeout(function() {
       if (profilerTooltip) {
         profilerTooltip.style.opacity = '0';
@@ -5147,6 +5010,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       }
     }, 200);
   }
+
   function profilerOnScroll() {
     if (profilerTooltip) {
       profilerTooltip.style.opacity = '0';
@@ -5156,13 +5020,16 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       }, 180);
     }
   }
+
   let profilerMsgObserver = null;
+
   function startProfiler() {
     if (profilerObserver) return;
     profilerMsgObserver = profilerWatchMessages();
     document.addEventListener('mouseenter', profilerOnMouseEnter, true);
     document.addEventListener('mouseleave', profilerOnMouseLeave, true);
     window.addEventListener('scroll', profilerOnScroll, true);
+
     profilerObserver = {
       disconnect: function() {
         document.removeEventListener('mouseenter', profilerOnMouseEnter, true);
@@ -5174,14 +5041,18 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       }
     };
   }
+
   function stopProfiler() {
     if (!profilerObserver) return;
     profilerObserver.disconnect();
     profilerObserver = null;
   }
+
   function initProfiler() {
     if (isProfilerEnabled()) startProfiler();
   }
+
+
   const CUSTOM_PLUGIN_KEY = 'fencord-custom-plugin-code';
   const CUSTOM_PLUGIN_ENABLED_KEY = 'fencord-custom-plugin-enabled';
   let customPluginCleanup = null;
@@ -5192,12 +5063,15 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
   const UI_TRANSLATIONS_LANG_KEY = 'fencord-ui-trans-lang';
   let translateMenuObserver = null;
   let uiTranslationInProgress = false;
+
   function isUITranslationEnabled() {
     return localStorage.getItem(UI_TRANSLATE_KEY) === 'true';
   }
+
   function setUITranslationEnabled(enabled) {
     localStorage.setItem(UI_TRANSLATE_KEY, enabled ? 'true' : 'false');
   }
+
   function getUITranslationsCache() {
     try {
       const cache = JSON.parse(localStorage.getItem(UI_TRANSLATIONS_CACHE_KEY) || '{}');
@@ -5207,10 +5081,12 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       return cache;
     } catch (e) { return {}; }
   }
+
   function saveUITranslationsCache(cache) {
     localStorage.setItem(UI_TRANSLATIONS_CACHE_KEY, JSON.stringify(cache));
     localStorage.setItem(UI_TRANSLATIONS_LANG_KEY, getTranslateLang());
   }
+
   function shouldSkipUITranslationNode(node) {
     const parent = node.parentElement;
     if (!parent) return true;
@@ -5225,14 +5101,17 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     if (parent.id === 'fencord-update-toast') return true;
     return false;
   }
+
   async function translateFencordUI() {
     const overlay = document.getElementById('fencord-overlay');
     if (!overlay || uiTranslationInProgress) return;
     if (!isUITranslationEnabled()) return;
     if (overlay.style.display === 'none') return;
+
     uiTranslationInProgress = true;
     const targetLang = getTranslateLang();
     let cache = getUITranslationsCache();
+
     const textNodes = [];
     const walker = document.createTreeWalker(overlay, NodeFilter.SHOW_TEXT, null, false);
     let node;
@@ -5240,13 +5119,16 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       if (shouldSkipUITranslationNode(node)) continue;
       textNodes.push({ node: node, text: node.textContent.trim() });
     }
+
     const uniqueMap = new Map();
     textNodes.forEach(item => {
       if (!uniqueMap.has(item.text)) uniqueMap.set(item.text, []);
       uniqueMap.get(item.text).push(item.node);
     });
+
     const uniqueTexts = Array.from(uniqueMap.keys());
     const toTranslate = uniqueTexts.filter(t => !cache[t]);
+
     if (toTranslate.length > 0) {
       try {
         const results = await Promise.all(
@@ -5261,6 +5143,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         console.warn('[Fencord UI Translate] batch failed:', e);
       }
     }
+
     textNodes.forEach(({ node, text }) => {
       const translated = cache[text];
       if (translated && translated !== text) {
@@ -5268,8 +5151,10 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         if (node.parentElement) node.parentElement.dataset.fencordUiOriginal = text;
       }
     });
+
     uiTranslationInProgress = false;
   }
+
   function revertFencordUITranslation() {
     const overlay = document.getElementById('fencord-overlay');
     if (!overlay) return;
@@ -5283,6 +5168,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       delete el.dataset.fencordUiOriginal;
     });
   }
+
   const TRANSLATE_LANGUAGES = [
     { code: 'ar', label: 'Arabic' },
     { code: 'en', label: 'English' },
@@ -5300,14 +5186,18 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     { code: 'pl', label: 'Polish' },
     { code: 'nl', label: 'Dutch' }
   ];
+
   function isTranslateEnabled() {
     return localStorage.getItem(TRANSLATE_KEY) === 'true';
   }
+
   function translateFencordUI() {
     const overlay = document.getElementById('fencord-overlay');
     if (!overlay || overlay.dataset.fencordTranslating === 'true') return;
     overlay.dataset.fencordTranslating = 'true';
+
     const targetLang = getTranslateLang();
+
     const walker = document.createTreeWalker(
       overlay,
       NodeFilter.SHOW_TEXT,
@@ -5324,11 +5214,13 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       },
       false
     );
+
     const nodes = [];
     let node;
     while ((node = walker.nextNode())) {
       nodes.push({ el: node.parentElement, text: node.textContent.trim() });
     }
+
     nodes.forEach(({ el, text }, index) => {
       el.dataset.fencordUiOriginal = text;
       setTimeout(() => {
@@ -5341,25 +5233,31 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         });
       }, index * 80);
     });
+
     setTimeout(() => {
       delete overlay.dataset.fencordTranslating;
     }, nodes.length * 80 + 2000);
   }
+
   function setTranslateEnabled(enabled) {
     localStorage.setItem(TRANSLATE_KEY, enabled ? 'true' : 'false');
     if (enabled) startTranslate();
     else stopTranslate();
   }
+
   function getTranslateLang() {
     return localStorage.getItem(TRANSLATE_LANG_KEY) || 'ar';
   }
+
   function setTranslateLang(code) {
     localStorage.setItem(TRANSLATE_LANG_KEY, code);
   }
+
   function getLangLabel(code) {
     const found = TRANSLATE_LANGUAGES.find(l => l.code === code);
     return found ? found.label : code;
   }
+
   function doGMTranslate(text, targetLang) {
     return new Promise((resolve) => {
       const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' + targetLang + '&dt=t&q=' + encodeURIComponent(text);
@@ -5368,6 +5266,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         resolve({ ok: false, error: 'GM API missing', text: null, sourceLang: null });
         return;
       }
+
       GM_xmlhttpRequest({
         method: 'GET',
         url: url,
@@ -5411,11 +5310,13 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       });
     });
   }
+
   function openTranslatePopup(text, targetLang) {
     const encoded = encodeURIComponent(text);
     const url = `https://translate.google.com/?sl=auto&tl=${targetLang}&text=${encoded}&op=translate`;
     window.open(url, '_blank', 'width=900,height=650,noopener,noreferrer');
   }
+
   function extractMessageText(el) {
     let fullText = '';
     try {
@@ -5435,6 +5336,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     } catch (e) {}
     return fullText;
   }
+
   function getMessageTextRect(msgEl) {
     let bestEl = null;
     let bestLen = 0;
@@ -5456,11 +5358,14 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
   function showTranslateOverlay(msgEl, translated, sourceLang, targetLang) {
     const existing = document.getElementById('fencord-translate-overlay');
     if (existing) existing.remove();
+
     const rect = getMessageTextRect(msgEl);
     const overlay = document.createElement('div');
     overlay.id = 'fencord-translate-overlay';
+
     const sourceName = getLangLabel(sourceLang);
     const targetName = getLangLabel(targetLang);
+
     const header = document.createElement('div');
     header.textContent = `🌐  ${sourceName} → ${targetName}`;
     Object.assign(header.style, {
@@ -5475,6 +5380,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       gap: '6px',
       letterSpacing: '0.3px'
     });
+
     const body = document.createElement('div');
     body.textContent = translated;
     Object.assign(body.style, {
@@ -5487,6 +5393,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       overflowY: 'auto',
       overflowX: 'hidden'
     });
+
     const hint = document.createElement('div');
     hint.textContent = 'Click anywhere to dismiss';
     Object.assign(hint.style, {
@@ -5496,13 +5403,16 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       textAlign: 'right',
       fontStyle: 'italic'
     });
+
     overlay.appendChild(header);
     overlay.appendChild(body);
     overlay.appendChild(hint);
+
     const isLong = translated.length > 120;
     const overlayWidth = isLong ? 520 : Math.max(rect.width + 8, 320);
     let left = isLong ? (window.innerWidth - overlayWidth) / 2 : rect.left;
     let top = isLong ? 100 : rect.top - 4;
+
     Object.assign(overlay.style, {
       position: 'fixed',
       left: left + 'px',
@@ -5522,11 +5432,14 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       pointerEvents: 'auto',
       cursor: 'default'
     });
+
     document.documentElement.appendChild(overlay);
+
     requestAnimationFrame(() => {
       overlay.style.opacity = '1';
       overlay.style.transform = 'translateY(0)';
     });
+
     const autoHide = (e) => {
       if (!overlay.contains(e.target)) {
         overlay.style.opacity = '0';
@@ -5541,11 +5454,13 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       document.addEventListener('scroll', autoHide, true);
     }, 50);
   }
+
   function isFenridContextMenu(el) {
     if (!el || el.nodeType !== 1) return false;
     const txt = el.textContent || '';
     return txt.includes('Copy Text') && (txt.includes('Reply') || txt.includes('Delete Message'));
   }
+
   function findMenuItemByText(menuEl, text) {
     const items = menuEl.querySelectorAll('div, button, span, a');
     for (let i = 0; i < items.length; i++) {
@@ -5554,9 +5469,11 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     }
     return null;
   }
+
   function createNativeMenuRow({ icon, label, onClick, borderTop }) {
     const row = document.createElement('div');
     row.dataset.fencordTranslateRow = 'true';
+
     const iconEl = document.createElement('span');
     iconEl.textContent = icon;
     Object.assign(iconEl.style, {
@@ -5566,6 +5483,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       flexShrink: '0',
       lineHeight: '1'
     });
+
     const labelEl = document.createElement('span');
     labelEl.textContent = label;
     Object.assign(labelEl.style, {
@@ -5573,8 +5491,10 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       fontSize: '13px',
       fontWeight: '500'
     });
+
     row.appendChild(iconEl);
     row.appendChild(labelEl);
+
     Object.assign(row.style, {
       display: 'flex',
       alignItems: 'center',
@@ -5589,22 +5509,27 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       opacity: '1',
       backgroundColor: 'transparent'
     });
+
     row.onmouseenter = () => {
       row.style.backgroundColor = 'var(--hover-overlay, rgba(255,255,255,0.05))';
     };
     row.onmouseleave = () => {
       row.style.backgroundColor = 'transparent';
     };
+
     row.addEventListener('click', onClick);
     return row;
   }
+
   function injectTranslateRow(menuEl, msgEl, text) {
     if (!menuEl || !msgEl) return;
     if (menuEl.querySelector('[data-fencord-translate-row]')) return;
+
     const targetLang = getTranslateLang();
     const isTranslated = !!msgEl.dataset.fencordTranslatedMessage;
     const copyTextItem = findMenuItemByText(menuEl, 'Copy Text');
     const copyLinkItem = findMenuItemByText(menuEl, 'Copy Link');
+
     const row = createNativeMenuRow({
       icon: '🌐',
       label: isTranslated ? 'Show Original' : 'Translate Message',
@@ -5612,8 +5537,11 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       onClick: async (ev) => {
         ev.stopPropagation();
         ev.preventDefault();
+
         row.remove();
+
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
         if (isTranslated) {
           delete msgEl.dataset.fencordTranslatedMessage;
           const existingOverlay = document.getElementById('fencord-translate-overlay');
@@ -5621,8 +5549,10 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
           showToast('Restored original', { color: 'var(--text-muted)', duration: 1500 });
           return;
         }
+
         showToast('Translating...', { color: 'var(--primary-action)', duration: 3000 });
         const result = await doGMTranslate(text, targetLang);
+
         if (result.ok && result.text) {
           msgEl.dataset.fencordTranslatedMessage = 'true';
           showTranslateOverlay(msgEl, result.text, result.sourceLang, targetLang);
@@ -5634,6 +5564,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         }
       }
     });
+
     if (copyTextItem && copyLinkItem) {
       menuEl.insertBefore(row, copyLinkItem);
     } else if (copyTextItem && copyTextItem.nextElementSibling) {
@@ -5646,12 +5577,16 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       menuEl.appendChild(row);
     }
   }
+
   function onTranslateContextMenu(e) {
     if (!isTranslateEnabled()) return;
+
     const msgEl = e.target.closest?.('[class*="message"], [data-message], .message, .msg, [class*="group"]');
     if (!msgEl) return;
+
     const text = extractMessageText(msgEl);
     if (!text || text.length < 2) return;
+
     const allDivs = document.querySelectorAll('div');
     for (let i = allDivs.length - 1; i >= Math.max(0, allDivs.length - 15); i--) {
       if (isFenridContextMenu(allDivs[i])) {
@@ -5659,10 +5594,12 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         return;
       }
     }
+
     if (translateMenuObserver) {
       translateMenuObserver.disconnect();
       translateMenuObserver = null;
     }
+
     let found = false;
     translateMenuObserver = new MutationObserver((mutations) => {
       if (found) return;
@@ -5693,7 +5630,9 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         }
       }
     });
+
     translateMenuObserver.observe(document.body, { childList: true, subtree: true });
+
     setTimeout(() => {
       if (translateMenuObserver) {
         translateMenuObserver.disconnect();
@@ -5701,9 +5640,11 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       }
     }, 500);
   }
+
   function startTranslate() {
     document.addEventListener('contextmenu', onTranslateContextMenu, true);
   }
+
   function stopTranslate() {
     document.removeEventListener('contextmenu', onTranslateContextMenu, true);
     if (translateMenuObserver) {
@@ -5711,7 +5652,10 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       translateMenuObserver = null;
     }
   }
+
+
   const DANGEROUS_PATTERNS = [
+
     { pattern: /fetch\s*\(/gi, name: 'fetch() — network requests', severity: 'high' },
     { pattern: /XMLHttpRequest/gi, name: 'XMLHttpRequest', severity: 'high' },
     { pattern: /WebSocket/gi, name: 'WebSocket', severity: 'high' },
@@ -5721,6 +5665,8 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     { pattern: /navigator\.sendBeacon|navigator\.connection/gi, name: 'network/connection introspection', severity: 'medium' },
     { pattern: /import\s*\(/gi, name: 'dynamic import()', severity: 'high' },
     { pattern: /require\s*\(/gi, name: 'require()', severity: 'high' },
+
+
     { pattern: /eval\s*\(/gi, name: 'eval()', severity: 'high' },
     { pattern: /Function\s*\(/gi, name: 'Function() constructor', severity: 'high' },
     { pattern: /setTimeout\s*\(\s*["'`]/gi, name: 'setTimeout with a string (implicit eval)', severity: 'high' },
@@ -5729,6 +5675,8 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     { pattern: /String\.fromCharCode/gi, name: 'String.fromCharCode (common obfuscation trick)', severity: 'medium' },
     { pattern: /\\x[0-9a-f]{2}(\\x[0-9a-f]{2}){5,}/gi, name: 'hex-escaped string blob (obfuscated payload)', severity: 'medium' },
     { pattern: /\[\s*["']constructor["']\s*\]/gi, name: 'accessing .constructor via brackets (sandbox-escape trick)', severity: 'high' },
+
+
     { pattern: /document\.cookie/gi, name: 'document.cookie access', severity: 'high' },
     { pattern: /localStorage\s*\.\s*getItem/gi, name: 'reading localStorage (may target tokens/session data)', severity: 'medium' },
     { pattern: /localStorage\.clear\s*\(/gi, name: 'localStorage.clear()', severity: 'high' },
@@ -5737,14 +5685,20 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     { pattern: /navigator\.credentials/gi, name: 'Credential Management API', severity: 'high' },
     { pattern: /\btoken\b|\bpassword\b|\bwebhook\b/gi, name: "references to 'token' / 'password' / 'webhook'", severity: 'medium' },
     { pattern: /discord(app)?\.com\/api\/webhooks/gi, name: 'Discord webhook URL (classic exfil vector)', severity: 'high' },
+
+
     { pattern: /navigator\.clipboard/gi, name: 'clipboard read/write access', severity: 'high' },
     { pattern: /addEventListener\s*\(\s*["']key(down|up|press)["']/gi, name: 'keystroke listener (possible keylogger)', severity: 'medium' },
     { pattern: /addEventListener\s*\(\s*["']paste["']/gi, name: 'paste event listener', severity: 'medium' },
+
+
     { pattern: /document\.write/gi, name: 'document.write', severity: 'high' },
     { pattern: /location\s*(=|\.href\s*=|\.replace\s*\()/gi, name: 'page redirect (location change)', severity: 'high' },
     { pattern: /window\.open/gi, name: 'window.open', severity: 'medium' },
     { pattern: /<\s*script/gi, name: 'injecting a <script> tag', severity: 'high' },
     { pattern: /<\s*iframe/gi, name: 'injecting an <iframe>', severity: 'medium' },
+
+
     { pattern: /chrome\s*\./gi, name: 'Chrome extension API', severity: 'high' },
     { pattern: /\bbrowser\s*\.\s*(runtime|storage|tabs|extension)/gi, name: 'browser extension API', severity: 'high' },
     { pattern: /GM_[A-Za-z]+/gi, name: 'Greasemonkey/Tampermonkey privileged API', severity: 'high' },
@@ -5752,6 +5706,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     { pattern: /prototype\s*\.\s*__/gi, name: 'prototype pollution attempt', severity: 'high' },
     { pattern: /top\s*\.\s*(location|postMessage)|parent\s*\.\s*(location|postMessage)/gi, name: 'reaching into top/parent frame', severity: 'medium' },
   ];
+
   function scanForSuspiciousBlobs(code) {
     const issues = [];
     const blob = code.match(/[A-Za-z0-9+/]{80,}={0,2}/g);
@@ -5760,18 +5715,26 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     }
     return issues;
   }
+
+
   let contextMenuEl = null;
+
   function profilerShowRolesContextMenu(username, x, y) {
     if (contextMenuEl) { contextMenuEl.remove(); contextMenuEl = null; }
+
     const roles = profilerFindAllRoles(username);
     const msgCount = profilerMsgCounter.get(username) || 0;
+
     const menu = document.createElement('div');
     menu.id = 'fencord-context-menu';
+
     let html = '';
+
     html += '<div style="padding:10px 14px;border-bottom:1px solid var(--borders-and-separators);font-weight:700;font-size:13px;color:var(--text-primary);display:flex;align-items:center;gap:8px;">';
     html += '<span style="font-size:14px;">🎭</span>';
     html += profilerEscapeHtml(username);
     html += '</div>';
+
     if (roles.length > 0) {
       html += '<div style="padding:10px 14px;">';
       html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;font-weight:600;">Roles (' + roles.length + ')</div>';
@@ -5786,11 +5749,14 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     } else {
       html += '<div style="padding:10px 14px;font-size:12px;color:var(--text-muted);font-style:italic;">No roles detected</div>';
     }
+
     html += '<div style="padding:8px 14px;border-top:1px solid var(--borders-and-separators);display:flex;justify-content:space-between;align-items:center;">';
     html += '<span style="font-size:11px;color:var(--text-muted);">💬 Messages</span>';
     html += '<span style="font-size:12px;font-weight:700;color:var(--accent-vibrant);">' + msgCount + '</span>';
     html += '</div>';
+
     menu.innerHTML = html;
+
     Object.assign(menu.style, {
       position: 'fixed',
       zIndex: '1000006',
@@ -5807,6 +5773,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       transform: 'scale(0.95)',
       transition: 'opacity 0.12s ease, transform 0.12s ease'
     });
+
     document.body.appendChild(menu);
     contextMenuEl = menu;
     const rect = menu.getBoundingClientRect();
@@ -5815,13 +5782,16 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     if (left + rect.width > window.innerWidth - 10) left = window.innerWidth - rect.width - 10;
     if (top + rect.height > window.innerHeight - 10) top = y - rect.height;
     if (top < 10) top = 10;
+
     menu.style.left = left + 'px';
     menu.style.top = top + 'px';
+
     requestAnimationFrame(function() {
       menu.style.opacity = '1';
       menu.style.transform = 'scale(1)';
     });
   }
+
   function profilerHideContextMenu() {
     if (contextMenuEl) {
       contextMenuEl.style.opacity = '0';
@@ -5831,27 +5801,34 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       }, 120);
     }
   }
+
   function profilerOnContextMenu(e) {
     const target = e.target;
     const usernameEl = target.closest('span.font-semibold.cursor-pointer');
     if (!usernameEl) return;
+
     e.preventDefault();
     e.stopPropagation();
+
     const username = usernameEl.textContent.trim();
     if (!username) return;
+
     profilerShowRolesContextMenu(username, e.clientX, e.clientY);
   }
+
   function profilerOnDocumentClick(e) {
     if (contextMenuEl && !contextMenuEl.contains(e.target)) {
       profilerHideContextMenu();
     }
   }
+
   const _originalStartProfiler = startProfiler;
   startProfiler = function() {
     _originalStartProfiler();
     document.addEventListener('contextmenu', profilerOnContextMenu, true);
     document.addEventListener('click', profilerOnDocumentClick, true);
   };
+
   const _originalStopProfiler = stopProfiler;
   stopProfiler = function() {
     _originalStopProfiler();
@@ -5859,6 +5836,8 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     document.removeEventListener('click', profilerOnDocumentClick, true);
     profilerHideContextMenu();
   };
+
+
   function scanCustomPlugin(code) {
     const found = [];
     for (let i = 0; i < DANGEROUS_PATTERNS.length; i++) {
@@ -5869,28 +5848,35 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       }
     }
     found.push(...scanForSuspiciousBlobs(code));
+
     const high = found.filter(f => f.severity === 'high');
     const medium = found.filter(f => f.severity === 'medium');
     return { high, medium, all: found, blocked: high.length > 0 };
   }
+
   function getCustomPluginCode() {
     return localStorage.getItem(CUSTOM_PLUGIN_KEY) || '';
   }
+
   function saveCustomPluginCode(code) {
     localStorage.setItem(CUSTOM_PLUGIN_KEY, code);
   }
+
   function isCustomPluginEnabled() {
     return localStorage.getItem(CUSTOM_PLUGIN_ENABLED_KEY) === 'true';
   }
+
   function setCustomPluginEnabled(enabled) {
     localStorage.setItem(CUSTOM_PLUGIN_ENABLED_KEY, enabled ? 'true' : 'false');
     if (enabled) runCustomPlugin();
     else stopCustomPlugin();
   }
+
   function runCustomPlugin() {
     stopCustomPlugin();
     const code = getCustomPluginCode();
     if (!code.trim()) return;
+
     const scan = scanCustomPlugin(code);
     if (scan.blocked) {
       alert('Custom plugin blocked!\n\nDangerous patterns found:\n• ' + scan.high.map(i => i.name).join('\n• ') + '\n\nRemove these and try again.');
@@ -5898,6 +5884,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       if (typeof refreshSettingsPanel === 'function') refreshSettingsPanel();
       return;
     }
+
     try {
       const wrapped = '(function() { "use strict"; const console = window.console; const document = window.document; const MutationObserver = window.MutationObserver; const setTimeout = window.setTimeout; const setInterval = window.setInterval; const clearTimeout = window.clearTimeout; const clearInterval = window.clearInterval; ' + code + ' })();';
       const fn = new Function(wrapped);
@@ -5911,20 +5898,26 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       if (typeof refreshSettingsPanel === 'function') refreshSettingsPanel();
     }
   }
+
   function stopCustomPlugin() {
     if (customPluginCleanup) {
       try { customPluginCleanup(); } catch (e) {}
       customPluginCleanup = null;
     }
   }
+
   function initCustomPlugin() {
     if (isCustomPluginEnabled()) runCustomPlugin();
   }
+
+
   function fencordProtectBlockedCount() {
     return (typeof window.__fencordShieldBlockedCount === 'function')
       ? window.__fencordShieldBlockedCount()
       : 0;
   }
+
+
   const FAVORITE_PLUGINS_KEY = 'fencord-favorite-plugins';
   let favStyleInjected = false;
 
@@ -5943,16 +5936,20 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     `;
     document.head.appendChild(style);
   }
+
   function getFavoritePlugins() {
     try { return JSON.parse(localStorage.getItem(FAVORITE_PLUGINS_KEY) || '[]'); }
     catch (e) { return []; }
   }
+
   function saveFavoritePlugins(list) {
     localStorage.setItem(FAVORITE_PLUGINS_KEY, JSON.stringify(list));
   }
+
   function isPluginFavorited(title) {
     return getFavoritePlugins().includes(title);
   }
+
   function togglePluginFavorite(title) {
     const list = getFavoritePlugins();
     const idx = list.indexOf(title);
@@ -5961,6 +5958,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     saveFavoritePlugins(list);
     return true;
   }
+
   function favBuildStar(title) {
     favInjectStyle();
     const star = document.createElement('span');
@@ -5985,10 +5983,13 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     });
     return star;
   }
+
   const USERNAME_HIDER_KEY = 'fencord-username-hider-mode';
   const ALLOWED_HIDER_MODES = new Set(['off', 'mine', 'others', 'both']);
   let usernameHiderInterval = null;
+
   const HIDER_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
+
   function randomScramble(length) {
     let out = '';
     for (let i = 0; i < length; i++) {
@@ -5996,24 +5997,30 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     }
     return out;
   }
+
   function getUsernameHiderMode() {
     const v = localStorage.getItem(USERNAME_HIDER_KEY) || 'off';
     return ALLOWED_HIDER_MODES.has(v) ? v : 'off';
   }
+
   function saveUsernameHiderMode(mode) {
     localStorage.setItem(USERNAME_HIDER_KEY, ALLOWED_HIDER_MODES.has(mode) ? mode : 'off');
   }
+
   function tickUsernameHider() {
     try {
       const mode = getUsernameHiderMode();
       if (mode === 'off') return;
+
       const myName = getMyRealUsername();
+
       document.querySelectorAll('span.font-semibold.cursor-pointer').forEach(el => {
         if (!el.dataset.fencordHiderOriginal) {
           el.dataset.fencordHiderOriginal = el.textContent.trim();
         }
         const original = el.dataset.fencordHiderOriginal;
         const isMe = myName && original === myName;
+
         const shouldHide =
           mode === 'both' ||
           (mode === 'mine' && isMe) ||
@@ -6029,6 +6036,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       });
     } catch (e) {}
   }
+
   function revertUsernameHider() {
     document.querySelectorAll('[data-fencord-hider-original]').forEach(el => {
       el.textContent = el.dataset.fencordHiderOriginal;
@@ -6036,42 +6044,36 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       delete el.dataset.fencordHiderActive;
     });
   }
+
   function setUsernameHiderMode(mode) {
     const clean = ALLOWED_HIDER_MODES.has(mode) ? mode : 'off';
     saveUsernameHiderMode(clean);
     revertUsernameHider();
+
     if (clean === 'off') {
       if (usernameHiderInterval) { clearInterval(usernameHiderInterval); usernameHiderInterval = null; }
       return;
     }
+
     tickUsernameHider();
+
     if (!usernameHiderInterval) {
       usernameHiderInterval = setInterval(tickUsernameHider, 1500);
     }
   }
+
   function initUsernameHider() {
     const mode = getUsernameHiderMode();
     if (mode !== 'off') setUsernameHiderMode(mode);
   }
+
   function init() {
     if (window.__fencordInitialized) return;
     Object.defineProperty(window, '__fencordInitialized', { value: true, enumerable: false, configurable: true });
+
     applyTheme(getSavedTheme());
     initFont();
     watchForSettingsButton();
-    setInterval(() => {
-      const existing = document.getElementById('fencord-btn');
-      if (existing && existing.isConnected) return;
-      const rows = document.querySelectorAll('button, a, [role="button"], li');
-      for (let i = 0; i < rows.length; i++) {
-        const el = rows[i];
-        if (el.childElementCount > 6) continue;
-        if (el.textContent.replace(/\s+/g, ' ').trim() === 'Connections') {
-          createSettingsUI();
-          return;
-        }
-      }
-    }, 1000);
     loadThemes();
     loadFonts();
     loadEffects();
@@ -6092,6 +6094,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     startUpdateChecker();
     showBootDisclaimerToast();
   }
+
   if (document.body) {
     init();
   } else {
