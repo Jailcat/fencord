@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fencord
 // @namespace    fencord
-// @version      102
+// @version      103
 // @description  Theme manager for Fenrid
 // @match        https://fenrid.com/*
 // @run-at       document-start
@@ -931,7 +931,6 @@
       styleEl.textContent = `:root {\n${rules}\n}`;
     }
 
-    refreshEffectBackdrops();
   }
 
   function getSavedTheme() {
@@ -1217,6 +1216,108 @@
   }
 
   // ---------------------------------------------------------------
+  // FENCORD SURGE BYPASS PLUGIN
+  // ---------------------------------------------------------------
+
+  const SURGE_BYPASS_KEY = 'fencord-surge-bypass-enabled';
+  let surgeBypassInterval = null;
+
+  function isSurgeBypassEnabled() {
+    const val = localStorage.getItem(SURGE_BYPASS_KEY);
+    return val === null ? true : val === 'true';
+  }
+
+  function surgeBypassUnlock() {
+    document.querySelectorAll('button[aria-label="Requires Surge"]').forEach(btn => {
+      btn.removeAttribute('disabled');
+      btn.classList.remove('cursor-not-allowed', 'opacity-70');
+
+      const overlay = btn.querySelector('span.bg-black\\/45');
+      if (overlay) overlay.remove();
+
+      btn.querySelectorAll('*').forEach(el => {
+        if (el.textContent.trim() === 'GIF' || el.className.includes('badge') || el.className.includes('gif')) {
+          if (el.tagName !== 'IMG') {
+            el.remove();
+          }
+        }
+      });
+
+      const img = btn.querySelector('img.grayscale');
+      if (img) img.classList.remove('grayscale');
+    });
+  }
+
+  function surgeBypassClickHandler(e) {
+    const btn = e.target.closest('button[aria-label="Requires Surge"]');
+    if (!btn) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    const img = btn.querySelector('img');
+    const imgSrc = img ? (img.getAttribute('src') || img.src) : null;
+
+    if (!imgSrc) return;
+
+    let finalUrl = imgSrc;
+    if (img.getAttribute('data-motion-source') === 'animated' || imgSrc.includes('animated=true')) {
+      let cleanUrl = imgSrc.split('?')[0];
+      finalUrl = `${cleanUrl}?size=48&animated=true`;
+    } else {
+      let cleanUrl = imgSrc.split('?')[0].replace('.webp', '.png');
+      finalUrl = `${cleanUrl}?size=48`;
+    }
+
+    const textBox = document.querySelector('div[contenteditable="true"], textarea');
+    if (textBox) {
+      textBox.focus();
+
+      if (textBox.tagName === 'TEXTAREA' || textBox.tagName === 'INPUT') {
+        textBox.value = finalUrl;
+      } else {
+        textBox.textContent = finalUrl;
+      }
+
+      textBox.dispatchEvent(new Event('input', { bubbles: true }));
+
+      setTimeout(() => {
+        const enterEvent = new KeyboardEvent('keydown', {
+          key: 'Enter',
+          code: 'Enter',
+          keyCode: 13,
+          which: 13,
+          bubbles: true
+        });
+        textBox.dispatchEvent(enterEvent);
+      }, 100);
+    }
+  }
+
+  function setSurgeBypassEnabled(enabled) {
+    localStorage.setItem(SURGE_BYPASS_KEY, enabled ? 'true' : 'false');
+    if (enabled) {
+      surgeBypassUnlock();
+      if (!surgeBypassInterval) {
+        surgeBypassInterval = setInterval(surgeBypassUnlock, 500);
+      }
+      document.removeEventListener('click', surgeBypassClickHandler, true);
+      document.addEventListener('click', surgeBypassClickHandler, true);
+    } else {
+      if (surgeBypassInterval) {
+        clearInterval(surgeBypassInterval);
+        surgeBypassInterval = null;
+      }
+      document.removeEventListener('click', surgeBypassClickHandler, true);
+    }
+  }
+
+  function initSurgeBypass() {
+    if (isSurgeBypassEnabled()) setSurgeBypassEnabled(true);
+  }
+
+  // ---------------------------------------------------------------
   // FONT PLUGIN
   // Injects a Google Fonts <link> and applies the chosen font-family
   // to the whole app via a !important style rule. Supports a preset
@@ -1419,24 +1520,102 @@
       return;
     }
 
+    // The gear Settings button doesn't exist on the mobile layout (settings
+    // is a full page there), so it's optional — we build our own row button.
     const settingsBtn = document.querySelector('button[title="Settings"]');
-    if (!settingsBtn) {
-      // Settings button not found yet, retry once after delay
-      setTimeout(createSettingsUI, 1000);
-      return;
-    }
 
     // Remove old elements if they exist but are detached (cleanup)
     if (existingBtn && !existingBtn.isConnected) existingBtn.remove();
     if (existingOverlay && !existingOverlay.isConnected) existingOverlay.remove();
 
-    const btn = settingsBtn.cloneNode(true);
+    let btn;
+    if (settingsBtn) {
+      btn = settingsBtn.cloneNode(true);
+      const svg = btn.querySelector('svg');
+      if (svg) svg.outerHTML = '🛠️';
+    } else {
+      // Build a row that matches the mobile settings list (icon + label + ›)
+      btn = document.createElement('button');
+      btn.type = 'button';
+      const iconEl = document.createElement('span');
+      iconEl.textContent = '🛠️';
+      Object.assign(iconEl.style, { fontSize: '20px', width: '26px', textAlign: 'center', flexShrink: '0' });
+      const labelEl = document.createElement('span');
+      labelEl.textContent = 'Fencord';
+      Object.assign(labelEl.style, { flex: '1', textAlign: 'left', fontSize: '17px', fontWeight: '500' });
+      const chevEl = document.createElement('span');
+      chevEl.textContent = '›';
+      Object.assign(chevEl.style, { opacity: '0.55', fontSize: '22px' });
+      btn.appendChild(iconEl);
+      btn.appendChild(labelEl);
+      btn.appendChild(chevEl);
+      Object.assign(btn.style, {
+        display: 'flex', alignItems: 'center', gap: '12px',
+        width: '100%', padding: '16px', boxSizing: 'border-box',
+        background: 'var(--secondary-button, rgba(255,255,255,0.04))',
+        color: 'var(--text-primary, #fff)',
+        border: 'none', borderRadius: '12px', cursor: 'pointer',
+        fontFamily: 'inherit'
+      });
+    }
     btn.id = 'fencord-btn';
     btn.title = `Fencord Settings — ${CREDITS_TEXT}`;
-    const svg = btn.querySelector('svg');
-    if (svg) svg.outerHTML = '🛠️';
 
-    settingsBtn.parentElement.insertBefore(btn, settingsBtn);
+    // Mobile-friendly placement: park the Fencord button directly under the
+    // "Connections" row in the settings sidebar (the <button> whose label is
+    // exactly "Connections"). Falls back to "Language", then to sitting
+    // before the Settings button — and keeps retrying so the button is MOVED
+    // under "Connections" as soon as the settings page actually renders.
+    function normalizeText(t) {
+      return String(t || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function findSidebarRow(labels) {
+      const wanted = (Array.isArray(labels) ? labels : [labels]).map(normalizeText);
+      // Only row-level elements — never inner spans — so we insert the button
+      // as a sibling of the row, not inside it.
+      const items = document.querySelectorAll('button, a, [role="button"], li');
+      for (let i = 0; i < items.length; i++) {
+        const el = items[i];
+        if (el.childElementCount > 6) continue;
+        if (wanted.includes(normalizeText(el.textContent))) return el;
+      }
+      return null;
+    }
+
+    function placeBtnUnder(row) {
+      if (!row || !row.parentElement) return false;
+      // Match the row layout of the other sidebar items on mobile
+      btn.style.width = '100%';
+      btn.style.justifyContent = 'flex-start';
+      row.parentElement.insertBefore(btn, row.nextSibling);
+      return true;
+    }
+
+    function findConnectionsRow() {
+      return (
+        findSidebarRow(['Connections', 'Connection']) ||
+        findSidebarRow('Language')
+      );
+    }
+
+    let anchorItem = findConnectionsRow();
+    if (!anchorItem && settingsBtn && settingsBtn.parentElement) {
+      settingsBtn.parentElement.insertBefore(btn, settingsBtn);
+    }
+
+    // The settings page often mounts after we first run — poll briefly and
+    // move the button under "Connections" the moment the row exists.
+    let placeTries = 0;
+    const placeInterval = setInterval(() => {
+      anchorItem = findConnectionsRow();
+      if (anchorItem) {
+        placeBtnUnder(anchorItem);
+        clearInterval(placeInterval);
+      } else if (++placeTries >= 30) { // ~15s then give up
+        clearInterval(placeInterval);
+      }
+    }, 500);
 
     // --- full-screen overlay ---
     let overlay = document.getElementById('fencord-overlay');
@@ -1678,6 +1857,7 @@
       actionsRow.appendChild(makeActionBtn('Quick 2-Color', () => openQuickThemeUI(renderPanel)));
       body.appendChild(actionsRow);
 
+
       // --- Background Effect (Matrix / Rain / Fire) ---
       const fxDivider = document.createElement('div');
       Object.assign(fxDivider.style, { borderTop: '1px solid var(--borders-and-separators)', margin: '20px 0', maxWidth: '420px' });
@@ -1818,6 +1998,7 @@
         gap: '12px',
         padding: '0 2px 12px',
         width: '100%',
+        maxWidth: '580px',
         boxSizing: 'border-box'
       });
 
@@ -1868,6 +2049,7 @@
         borderRadius: '6px',
         marginBottom: '12px',
         lineHeight: '1.4',
+        maxWidth: '580px',
         border: '1px solid var(--borders-and-separators)'
       });
       body.appendChild(disclaimerRow);
@@ -2044,7 +2226,7 @@
         return card;
       }
 
-      // Toggles first — even 2×2 grid
+      // --- Group 1: Visual & Display Toggles ---
       makePluginCard({
         icon: '🌈',
         title: 'RGB Usernames',
@@ -2057,6 +2239,155 @@
         }
       });
 
+      makePluginCard({
+        icon: '🌫️',
+        title: 'Blur Images',
+        desc: 'Hide images until clicked (spoiler-style)',
+        enabled: isImageBlurEnabled(),
+        onToggle: () => {
+          const next = !isImageBlurEnabled();
+          setImageBlurEnabled(next);
+          return next;
+        }
+      });
+
+      // --- Group 2: UI & Media Controls ---
+      makePluginCard({
+        icon: '✨',
+        title: 'UI Animations',
+        desc: 'Add smooth transitions and pop-in animations to the app',
+        enabled: isUiAnimationsEnabled(),
+        onToggle: () => {
+          const next = !isUiAnimationsEnabled();
+          setUiAnimationsEnabled(next);
+          return next;
+        }
+      });
+
+      makePluginCard({
+        icon: '🎵',
+        title: 'Media Controller',
+        desc: 'Intercept media playback into a draggable control panel',
+        enabled: isMediaControllerEnabled(),
+        onToggle: () => {
+          const next = !isMediaControllerEnabled();
+          setMediaControllerEnabled(next);
+          return next;
+        }
+      });
+
+      // --- Group 3: Time & Call Trackers ---
+      makePluginCard({
+        icon: '⏱️',
+        title: 'Call Timer',
+        desc: 'Show how long you\'ve been in the current call',
+        enabled: isCallTimerEnabled(),
+        onToggle: () => {
+          const next = !isCallTimerEnabled();
+          setCallTimerEnabled(next);
+          return next;
+        }
+      });
+
+      makePluginCard({
+        icon: '🕒',
+        title: 'Clock Time',
+        desc: 'Display live digital clock in the app HUD or header',
+        enabled: isClockTimeEnabled(),
+        onToggle: () => {
+          const next = !isClockTimeEnabled();
+          setClockTimeEnabled(next);
+          return next;
+        },
+        build: (controls, styleField) => {
+          const fmtSelect = document.createElement('select');
+          styleField(fmtSelect);
+          fmtSelect.style.cursor = 'pointer';
+          fmtSelect.style.fontSize = '12px';
+          fmtSelect.style.padding = '6px 8px';
+          CLOCK_FORMATS.forEach(f => {
+            const opt = document.createElement('option');
+            opt.value = f.id;
+            opt.textContent = f.label;
+            fmtSelect.appendChild(opt);
+          });
+          fmtSelect.value = getClockTimeFormat();
+          fmtSelect.addEventListener('change', () => {
+            setClockTimeFormat(fmtSelect.value);
+          });
+          controls.appendChild(fmtSelect);
+
+          const posSelect = document.createElement('select');
+          styleField(posSelect);
+          posSelect.style.cursor = 'pointer';
+          posSelect.style.fontSize = '12px';
+          posSelect.style.padding = '6px 8px';
+          CLOCK_POSITIONS.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.label;
+            posSelect.appendChild(opt);
+          });
+          posSelect.value = getClockTimePosition();
+          posSelect.addEventListener('change', () => {
+            setClockTimePosition(posSelect.value);
+          });
+          controls.appendChild(posSelect);
+        }
+      });
+
+
+      // --- Group 4: Profile & Identity Enhancements ---
+      makePluginCard({
+        icon: '⚡',
+        title: 'suger',
+        desc: 'fakesuger',
+        badge: '67',
+        enabled: isSurgeBypassEnabled(),
+        onToggle: () => {
+          const next = !isSurgeBypassEnabled();
+          setSurgeBypassEnabled(next);
+          return next;
+        }
+      });
+
+      makePluginCard({
+        icon: '🕵️',
+        title: 'Username Hider',
+        desc: 'Scramble usernames into random characters',
+        enabled: getUsernameHiderMode() !== 'off',
+        onToggle: () => {
+          const next = getUsernameHiderMode() === 'off' ? 'both' : 'off';
+          setUsernameHiderMode(next);
+          return next !== 'off';
+        },
+        build: (controls, styleField) => {
+          const modeSelect = document.createElement('select');
+          styleField(modeSelect);
+          modeSelect.style.cursor = 'pointer';
+          modeSelect.style.fontSize = '12px';
+          modeSelect.style.padding = '6px 8px';
+          [
+            { id: 'off', label: 'Off' },
+            { id: 'mine', label: 'Hide mine only' },
+            { id: 'others', label: 'Hide others only' },
+            { id: 'both', label: 'Hide all' }
+          ].forEach(o => {
+            const opt = document.createElement('option');
+            opt.value = o.id;
+            opt.textContent = o.label;
+            modeSelect.appendChild(opt);
+          });
+          modeSelect.value = getUsernameHiderMode();
+          modeSelect.addEventListener('change', () => {
+            setUsernameHiderMode(modeSelect.value);
+            renderPanel();
+          });
+          controls.appendChild(modeSelect);
+        }
+      });
+
+      // --- Group 5: Audio & Localization ---
       makePluginCard({
         icon: '🔊',
         title: 'Soft Tap Sounds',
@@ -2117,89 +2448,6 @@
         }
       });
 
-      makePluginCard({
-        icon: '🌫️',
-        title: 'Blur Images',
-        desc: 'Hide images until clicked (spoiler-style)',
-        enabled: isImageBlurEnabled(),
-        onToggle: () => {
-          const next = !isImageBlurEnabled();
-          setImageBlurEnabled(next);
-          return next;
-        }
-      });
-
-      makePluginCard({
-        icon: '⏱️',
-        title: 'Call Timer',
-        desc: 'Show how long you\'ve been in the current call',
-        enabled: isCallTimerEnabled(),
-        onToggle: () => {
-          const next = !isCallTimerEnabled();
-          setCallTimerEnabled(next);
-          return next;
-        }
-      });
-
-      makePluginCard({
-        icon: '✨',
-        title: 'UI Animations',
-        desc: 'Add smooth transitions and pop-in animations to the app',
-        enabled: isUiAnimationsEnabled(),
-        onToggle: () => {
-          const next = !isUiAnimationsEnabled();
-          setUiAnimationsEnabled(next);
-          return next;
-        }
-      });
-
-      makePluginCard({
-        icon: '🎵',
-        title: 'Media Controller',
-        desc: 'Intercept media playback into a draggable control panel',
-        enabled: isMediaControllerEnabled(),
-        onToggle: () => {
-          const next = !isMediaControllerEnabled();
-          setMediaControllerEnabled(next);
-          return next;
-        }
-      });
-
-      makePluginCard({
-        icon: '🕵️',
-        title: 'Username Hider',
-        desc: 'Scramble usernames into random characters',
-        enabled: getUsernameHiderMode() !== 'off',
-        onToggle: () => {
-          const next = getUsernameHiderMode() === 'off' ? 'both' : 'off';
-          setUsernameHiderMode(next);
-          return next !== 'off';
-        },
-        build: (controls, styleField) => {
-          const modeSelect = document.createElement('select');
-          styleField(modeSelect);
-          modeSelect.style.cursor = 'pointer';
-          modeSelect.style.fontSize = '12px';
-          modeSelect.style.padding = '6px 8px';
-          [
-            { id: 'off', label: 'Off' },
-            { id: 'mine', label: 'Hide mine only' },
-            { id: 'others', label: 'Hide others only' },
-            { id: 'both', label: 'Hide all' }
-          ].forEach(o => {
-            const opt = document.createElement('option');
-            opt.value = o.id;
-            opt.textContent = o.label;
-            modeSelect.appendChild(opt);
-          });
-          modeSelect.value = getUsernameHiderMode();
-          modeSelect.addEventListener('change', () => {
-            setUsernameHiderMode(modeSelect.value);
-            renderPanel();
-          });
-          controls.appendChild(modeSelect);
-        }
-      });
       makePluginCard({
         icon: '🌐',
         title: 'Translate Messages',
@@ -2280,10 +2528,12 @@
         }
       });
 
+      // --- Group 6: Advanced & Security (Full Width) ---
       makePluginCard({
         icon: '🔌',
         title: 'Custom Plugin',
         desc: 'PASTE UR PLUGIN lol',
+        wide: true,
         enabled: isCustomPluginEnabled(),
         onToggle: () => {
           const next = !isCustomPluginEnabled();
@@ -3274,6 +3524,10 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
 
 
 
+
+
+
+
   const BG_EFFECT_KEY = 'fencord-bg-effect';
   const MATRIX_BG_KEY = 'fencord-matrix-bg'; // legacy
   const RAIN_BG_KEY = 'fencord-rain-bg'; // legacy
@@ -3430,8 +3684,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     matrixRaf = requestAnimationFrame(draw);
   }
 
-
-
   const RAIN_CANVAS_ID = 'fencord-rain-canvas';
   const RAIN_STYLE_ID = 'fencord-rain-style';
 
@@ -3539,8 +3791,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
 
     rainRaf = requestAnimationFrame(draw);
   }
-
-
 
   const FIRE_CANVAS_ID = 'fencord-fire-canvas';
   const FIRE_STYLE_ID = 'fencord-fire-style';
@@ -3665,8 +3915,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
 
     fireRaf = requestAnimationFrame(draw);
   }
-
-
 
   const CALL_TIMER_KEY = 'fencord-call-timer';
   const CALL_TIMER_EL_ID = 'fencord-call-timer';
@@ -3805,7 +4053,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       return el;
     }
 
-    // Fallback floating pill if the label isn't found but Disconnect is.
     if (!el) {
       el = document.createElement('div');
       el.id = CALL_TIMER_EL_ID;
@@ -3835,7 +4082,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     const el = ensureCallTimerEl();
     if (!el) return;
     const time = formatCallElapsed(Date.now() - callJoinedAt);
-    // Inline next to the label is just the time; floating gets a prefix.
     el.textContent = el.tagName === 'SPAN' ? time : `Call · ${time}`;
   }
 
@@ -3888,6 +4134,269 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     }
   }
 
+  const CLOCK_TIME_KEY = 'fencord-clock-time-enabled';
+  const CLOCK_TIME_FORMAT_KEY = 'fencord-clock-time-format';
+  const CLOCK_TIME_POSITION_KEY = 'fencord-clock-time-position';
+  const CLOCK_TIME_EL_ID = 'fencord-clock-time';
+
+  const CLOCK_FORMATS = [
+    { id: '12h', label: '12-hour (10:45 AM)' },
+    { id: '12h_sec', label: '12-hour with seconds (10:45:32 AM)' },
+    { id: '24h', label: '24-hour (22:45)' },
+    { id: '24h_sec', label: '24-hour with seconds (22:45:32)' },
+    { id: 'full', label: 'Date + Time (Mon, Sep 14 · 10:45 AM)' }
+  ];
+
+  const CLOCK_POSITIONS = [
+    { id: 'corner', label: 'Top-Left Corner (Glass)' },
+    { id: 'floating', label: 'Floating Top-Right' },
+    { id: 'header', label: 'Top Header Bar' },
+    { id: 'userbar', label: 'Bottom User Panel' }
+  ];
+
+  let clockTimeInterval = null;
+
+  function isClockTimeEnabled() {
+    return localStorage.getItem(CLOCK_TIME_KEY) === 'true';
+  }
+
+  function getClockTimeFormat() {
+    const f = localStorage.getItem(CLOCK_TIME_FORMAT_KEY) || '12h';
+    return CLOCK_FORMATS.some(x => x.id === f) ? f : '12h';
+  }
+
+  function setClockTimeFormat(fmt) {
+    const clean = CLOCK_FORMATS.some(x => x.id === fmt) ? fmt : '12h';
+    localStorage.setItem(CLOCK_TIME_FORMAT_KEY, clean);
+    updateClockTimeDisplay();
+  }
+
+  function getClockTimePosition() {
+    const p = localStorage.getItem(CLOCK_TIME_POSITION_KEY) || 'floating';
+    return CLOCK_POSITIONS.some(x => x.id === p) ? p : 'floating';
+  }
+
+  function setClockTimePosition(pos) {
+    const clean = CLOCK_POSITIONS.some(x => x.id === pos) ? pos : 'floating';
+    localStorage.setItem(CLOCK_TIME_POSITION_KEY, clean);
+    const old = document.getElementById(CLOCK_TIME_EL_ID);
+    if (old) old.remove();
+    updateClockTimeDisplay();
+  }
+
+  function formatClockTime(now, fmt) {
+    if (fmt === '24h') {
+      return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    }
+    if (fmt === '24h_sec') {
+      return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    }
+    if (fmt === '12h_sec') {
+      return now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
+    }
+    if (fmt === 'full') {
+      const dateStr = now.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+      const timeStr = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+      return `${dateStr} · ${timeStr}`;
+    }
+    return now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+  }
+
+  function ensureClockTimeEl() {
+    let el = document.getElementById(CLOCK_TIME_EL_ID);
+    const pos = getClockTimePosition();
+
+    if (pos === 'corner') {
+      if (!el || el.dataset.pos !== 'corner') {
+        if (el) el.remove();
+        el = document.createElement('div');
+        el.id = CLOCK_TIME_EL_ID;
+        el.dataset.pos = 'corner';
+        document.body.appendChild(el);
+      }
+      Object.assign(el.style, {
+        position: 'fixed',
+        top: '12px',
+        left: '12px',
+        zIndex: '999999',
+        fontFamily: 'var(--font-primary, monospace)',
+        fontSize: '12px',
+        fontWeight: '600',
+        color: 'var(--header-primary, #fff)',
+        background: 'rgba(0, 0, 0, 0.4)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        padding: '5px 10px',
+        borderRadius: '8px',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+        cursor: 'pointer',
+        userSelect: 'none',
+        transition: 'all 0.3s ease'
+      });
+      el.title = 'Click to toggle 12h / 24h format';
+      el.onclick = () => {
+        const cur = getClockTimeFormat();
+        const next = cur.startsWith('24h') ? '12h_sec' : '24h_sec';
+        setClockTimeFormat(next);
+      };
+      return el;
+    }
+
+    if (pos === 'header') {
+      const header = document.querySelector('header, nav, [class*="header_"], [class*="topbar_"]') ||
+                     document.querySelector('[class*="chat"] [class*="title"]') ||
+                     document.querySelector('div[class*="flex"][class*="items-center"][class*="h-"]');
+      if (header) {
+        if (!el || el.dataset.pos !== 'header') {
+          if (el) el.remove();
+          el = document.createElement('div');
+          el.id = CLOCK_TIME_EL_ID;
+          el.dataset.pos = 'header';
+          header.appendChild(el);
+        }
+        Object.assign(el.style, {
+          position: 'static',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '4px 10px',
+          borderRadius: '6px',
+          background: 'var(--secondary-button, rgba(255,255,255,0.06))',
+          color: 'var(--text-primary, #fff)',
+          border: '1px solid var(--borders-and-separators, rgba(255,255,255,0.1))',
+          fontSize: '12px',
+          fontWeight: '600',
+          fontFamily: 'inherit',
+          fontVariantNumeric: 'tabular-nums',
+          letterSpacing: '0.3px',
+          cursor: 'pointer',
+          userSelect: 'none',
+          marginLeft: 'auto',
+          marginRight: '8px'
+        });
+        el.title = 'Click to toggle 12h / 24h format';
+        el.onclick = () => {
+          const cur = getClockTimeFormat();
+          const next = cur.startsWith('24h') ? '12h_sec' : '24h_sec';
+          setClockTimeFormat(next);
+        };
+        return el;
+      }
+    } else if (pos === 'userbar') {
+      const settingsBtn = document.querySelector('button[title="Settings"]');
+      if (settingsBtn && settingsBtn.parentElement) {
+        if (!el || el.dataset.pos !== 'userbar') {
+          if (el) el.remove();
+          el = document.createElement('div');
+          el.id = CLOCK_TIME_EL_ID;
+          el.dataset.pos = 'userbar';
+          const container = settingsBtn.closest('[class*="user"], [class*="panel"]') || settingsBtn.parentElement;
+          if (container && container.parentElement) {
+            container.parentElement.insertBefore(el, container);
+          } else {
+            settingsBtn.parentElement.insertBefore(el, settingsBtn);
+          }
+        }
+        Object.assign(el.style, {
+          position: 'static',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '4px 8px',
+          borderRadius: '6px',
+          background: 'var(--hover-overlay, rgba(255,255,255,0.04))',
+          color: 'var(--text-muted, #999)',
+          fontSize: '11px',
+          fontWeight: '600',
+          fontFamily: 'inherit',
+          fontVariantNumeric: 'tabular-nums',
+          cursor: 'pointer',
+          userSelect: 'none',
+          marginBottom: '4px',
+          width: 'fit-content'
+        });
+        el.title = 'Click to toggle 12h / 24h format';
+        el.onclick = () => {
+          const cur = getClockTimeFormat();
+          const next = cur.startsWith('24h') ? '12h_sec' : '24h_sec';
+          setClockTimeFormat(next);
+        };
+        return el;
+      }
+    }
+
+    if (!el || el.dataset.pos !== 'floating') {
+      if (el) el.remove();
+      el = document.createElement('div');
+      el.id = CLOCK_TIME_EL_ID;
+      el.dataset.pos = 'floating';
+      document.body.appendChild(el);
+    }
+    Object.assign(el.style, {
+      position: 'fixed',
+      top: '12px',
+      right: '64px',
+      zIndex: '999990',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      padding: '5px 12px',
+      borderRadius: '8px',
+      background: 'var(--popups-and-modals, #1e1e2e)',
+      color: 'var(--text-primary, #cdd6f4)',
+      border: '1px solid var(--borders-and-separators, #313244)',
+      boxShadow: '0 4px 14px rgba(0,0,0,0.3)',
+      fontSize: '12px',
+      fontWeight: '600',
+      fontFamily: 'inherit',
+      fontVariantNumeric: 'tabular-nums',
+      letterSpacing: '0.3px',
+      cursor: 'pointer',
+      userSelect: 'none'
+    });
+    el.title = 'Click to toggle 12h / 24h format';
+    el.onclick = () => {
+      const cur = getClockTimeFormat();
+      const next = cur.startsWith('24h') ? '12h_sec' : '24h_sec';
+      setClockTimeFormat(next);
+    };
+    return el;
+  }
+
+  function updateClockTimeDisplay() {
+    if (!isClockTimeEnabled()) return;
+    const el = ensureClockTimeEl();
+    if (!el) return;
+    const timeStr = formatClockTime(new Date(), getClockTimeFormat());
+    el.textContent = el.dataset.pos === 'corner' ? timeStr : `🕒 ${timeStr}`;
+  }
+
+  function removeClockTimeEl() {
+    const el = document.getElementById(CLOCK_TIME_EL_ID);
+    if (el) el.remove();
+    const oldSmart = document.getElementById('fencord-smart-corner-clock');
+    if (oldSmart) oldSmart.remove();
+  }
+
+  function setClockTimeEnabled(enabled) {
+    localStorage.setItem(CLOCK_TIME_KEY, enabled ? 'true' : 'false');
+    if (enabled) {
+      updateClockTimeDisplay();
+      if (!clockTimeInterval) {
+        clockTimeInterval = setInterval(updateClockTimeDisplay, 1000);
+      }
+    } else {
+      removeClockTimeEl();
+      if (clockTimeInterval) {
+        clearInterval(clockTimeInterval);
+        clockTimeInterval = null;
+      }
+    }
+  }
+
+  function initClockTime() {
+    if (isClockTimeEnabled()) setClockTimeEnabled(true);
+  }
 
 
   const UI_ANIMATIONS_KEY = 'fencord-ui-animations';
@@ -3956,15 +4465,34 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
 
 
 
-  const CURRENT_VERSION = 101;
+  const CURRENT_VERSION = 109;
   // raw.githubusercontent.com refreshes ~every 5m; jsDelivr can lag much longer on @main.
   const SCRIPT_UPDATE_URL = 'https://github.com/fencord/fencord/raw/main/fencord.user.js';
   const REPO_PAGE_URL = 'https://github.com/fencord/fencord';
   const BUNDLED_THEMES = {"none":{"name":"None (Default)","vars":{}},"hotpink":{"name":"Hot Pink","vars":{"--background":"#2b0010","--foreground":"#ffffff","--server-sidebar":"#1a0009","--channel-sidebar":"#3d0016","--main-chat-area":"#2b0010","--member-list":"#1a0009","--popups-and-modals":"#3d0016","--borders-and-separators":"#ff0055","--primary-action":"#ff007f","--primary-hover":"#ff3399","--secondary-button":"#660033","--secondary-button-hover":"#99004d","--accent-vibrant":"#ff007f","--success-green":"#ff66aa","--error-red":"#ff0000","--warning-yellow":"#ff66aa","--text-primary":"#ffffff","--text-secondary":"#ffb3d1","--text-muted":"#ff80b3","--interactive-hover":"#ff007f","--hover-overlay":"#ff007f22","--active-overlay":"#ff007f33","--primary-foreground":"#ffffff","--matrix-rain":"#ff007f"}},"catppuccin":{"name":"Catppuccin Mocha","vars":{"--background":"#1e1e2e","--foreground":"#cdd6f4","--server-sidebar":"#181825","--channel-sidebar":"#1e1e2e","--main-chat-area":"#1e1e2e","--member-list":"#181825","--popups-and-modals":"#1e1e2e","--borders-and-separators":"#313244","--primary-action":"#89b4fa","--primary-hover":"#74a8f9","--secondary-button":"#313244","--secondary-button-hover":"#45475a","--accent-vibrant":"#89b4fa","--success-green":"#a6e3a1","--error-red":"#f38ba8","--warning-yellow":"#f9e2af","--text-primary":"#cdd6f4","--text-secondary":"#a6adc8","--text-muted":"#6c7086","--interactive-hover":"#89b4fa","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#1e1e2e","--matrix-rain":"#89b4fa"}},"dracula":{"name":"Dracula","vars":{"--background":"#282a36","--foreground":"#f8f8f2","--server-sidebar":"#21222c","--channel-sidebar":"#282a36","--main-chat-area":"#282a36","--member-list":"#21222c","--popups-and-modals":"#282a36","--borders-and-separators":"#44475a","--primary-action":"#bd93f9","--primary-hover":"#a679f2","--secondary-button":"#44475a","--secondary-button-hover":"#565a72","--accent-vibrant":"#ff79c6","--success-green":"#50fa7b","--error-red":"#ff5555","--warning-yellow":"#f1fa8c","--text-primary":"#f8f8f2","--text-secondary":"#bfbfd1","--text-muted":"#6272a4","--interactive-hover":"#bd93f9","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#282a36","--matrix-rain":"#ff79c6"}},"nord":{"name":"Nord","vars":{"--background":"#2e3440","--foreground":"#eceff4","--server-sidebar":"#242933","--channel-sidebar":"#2e3440","--main-chat-area":"#2e3440","--member-list":"#242933","--popups-and-modals":"#2e3440","--borders-and-separators":"#4c566a","--primary-action":"#88c0d0","--primary-hover":"#8fbcbb","--secondary-button":"#3b4252","--secondary-button-hover":"#434c5e","--accent-vibrant":"#81a1c1","--success-green":"#a3be8c","--error-red":"#bf616a","--warning-yellow":"#ebcb8b","--text-primary":"#eceff4","--text-secondary":"#d8dee9","--text-muted":"#7b88a1","--interactive-hover":"#88c0d0","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#2e3440","--matrix-rain":"#81a1c1"}},"gruvbox":{"name":"Gruvbox Dark","vars":{"--background":"#282828","--foreground":"#ebdbb2","--server-sidebar":"#1d2021","--channel-sidebar":"#282828","--main-chat-area":"#282828","--member-list":"#1d2021","--popups-and-modals":"#282828","--borders-and-separators":"#3c3836","--primary-action":"#fe8019","--primary-hover":"#fb923c","--secondary-button":"#3c3836","--secondary-button-hover":"#504945","--accent-vibrant":"#fabd2f","--success-green":"#b8bb26","--error-red":"#fb4934","--warning-yellow":"#fabd2f","--text-primary":"#ebdbb2","--text-secondary":"#d5c4a1","--text-muted":"#928374","--interactive-hover":"#fe8019","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#282828","--matrix-rain":"#fabd2f"}},"tokyonight":{"name":"Tokyo Night","vars":{"--background":"#1a1b26","--foreground":"#c0caf5","--server-sidebar":"#16161e","--channel-sidebar":"#1a1b26","--main-chat-area":"#1a1b26","--member-list":"#16161e","--popups-and-modals":"#1a1b26","--borders-and-separators":"#292e42","--primary-action":"#7aa2f7","--primary-hover":"#89b4fa","--secondary-button":"#292e42","--secondary-button-hover":"#3b4261","--accent-vibrant":"#bb9af7","--success-green":"#9ece6a","--error-red":"#f7768e","--warning-yellow":"#e0af68","--text-primary":"#c0caf5","--text-secondary":"#a9b1d6","--text-muted":"#565f89","--interactive-hover":"#7aa2f7","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#1a1b26","--matrix-rain":"#bb9af7"}},"vaporwave":{"name":"Vaporwave","vars":{"--background":"#241b2f","--foreground":"#f8f0fb","--server-sidebar":"#1a1424","--channel-sidebar":"#2b2038","--main-chat-area":"#241b2f","--member-list":"#1a1424","--popups-and-modals":"#2b2038","--borders-and-separators":"#553c7b","--primary-action":"#ff6ad5","--primary-hover":"#ff8ade","--secondary-button":"#3c2b52","--secondary-button-hover":"#513a6d","--accent-vibrant":"#8bd3ff","--success-green":"#94ffb3","--error-red":"#ff5c8a","--warning-yellow":"#ffd76a","--text-primary":"#f8f0fb","--text-secondary":"#d3b8e8","--text-muted":"#8d6fae","--interactive-hover":"#ff6ad5","--hover-overlay":"#ff6ad51a","--active-overlay":"#ff6ad526","--primary-foreground":"#241b2f","--matrix-rain":"#8bd3ff"}},"glitchcore":{"name":"Glitchcore","vars":{"--background":"#0a0a0f","--foreground":"#e0fbff","--server-sidebar":"#050507","--channel-sidebar":"#0f0f16","--main-chat-area":"#0a0a0f","--member-list":"#050507","--popups-and-modals":"#0f0f16","--borders-and-separators":"#ff00e5","--primary-action":"#00fff2","--primary-hover":"#5affee","--secondary-button":"#1a1a24","--secondary-button-hover":"#2a2a38","--accent-vibrant":"#ff00e5","--success-green":"#39ff14","--error-red":"#ff0037","--warning-yellow":"#faff00","--text-primary":"#e0fbff","--text-secondary":"#9be8ff","--text-muted":"#4d6b73","--interactive-hover":"#ff00e5","--hover-overlay":"#00fff21a","--active-overlay":"#ff00e526","--primary-foreground":"#0a0a0f","--matrix-rain":"#ff00e5"}},"digicore":{"name":"Digicore","vars":{"--background":"#12101c","--foreground":"#f1e8ff","--server-sidebar":"#0b0a13","--channel-sidebar":"#171425","--main-chat-area":"#12101c","--member-list":"#0b0a13","--popups-and-modals":"#171425","--borders-and-separators":"#3a2e5c","--primary-action":"#c77dff","--primary-hover":"#d896ff","--secondary-button":"#241f3a","--secondary-button-hover":"#332a52","--accent-vibrant":"#7dfff0","--success-green":"#7dffb0","--error-red":"#ff5c7a","--warning-yellow":"#ffe27d","--text-primary":"#f1e8ff","--text-secondary":"#c9b8ea","--text-muted":"#6b5a94","--interactive-hover":"#c77dff","--hover-overlay":"#c77dff1a","--active-overlay":"#c77dff26","--primary-foreground":"#12101c","--matrix-rain":"#7dfff0"}},"solarizedlight":{"name":"Solarized Light","vars":{"--background":"#fdf6e3","--foreground":"#073642","--server-sidebar":"#eee8d5","--channel-sidebar":"#fdf6e3","--main-chat-area":"#fdf6e3","--member-list":"#eee8d5","--popups-and-modals":"#fdf6e3","--borders-and-separators":"#d3cbb7","--primary-action":"#268bd2","--primary-hover":"#2aa1f0","--secondary-button":"#e4ddc8","--secondary-button-hover":"#d8d0b8","--accent-vibrant":"#2aa198","--success-green":"#859900","--error-red":"#dc322f","--warning-yellow":"#b58900","--text-primary":"#073642","--text-secondary":"#4c6b70","--text-muted":"#93a1a1","--interactive-hover":"#268bd2","--hover-overlay":"#00000012","--active-overlay":"#0000001e","--primary-foreground":"#fdf6e3","--matrix-rain":"#2aa198"}},"paperwhite":{"name":"Paper White","vars":{"--background":"#ffffff","--foreground":"#1a1a1a","--server-sidebar":"#f4f4f5","--channel-sidebar":"#ffffff","--main-chat-area":"#ffffff","--member-list":"#f4f4f5","--popups-and-modals":"#ffffff","--borders-and-separators":"#e2e2e5","--primary-action":"#3355ff","--primary-hover":"#5470ff","--secondary-button":"#eeeef0","--secondary-button-hover":"#e2e2e6","--accent-vibrant":"#3355ff","--success-green":"#1f9d55","--error-red":"#e0293e","--warning-yellow":"#c98a11","--text-primary":"#1a1a1a","--text-secondary":"#55555a","--text-muted":"#9a9aa0","--interactive-hover":"#3355ff","--hover-overlay":"#00000010","--active-overlay":"#0000001c","--primary-foreground":"#ffffff","--matrix-rain":"#3355ff"}},"midnightocean":{"name":"Midnight Ocean","vars":{"--background":"#031521","--foreground":"#dff4ff","--server-sidebar":"#020f18","--channel-sidebar":"#04202f","--main-chat-area":"#031521","--member-list":"#020f18","--popups-and-modals":"#04202f","--borders-and-separators":"#0d3d54","--primary-action":"#20b2c4","--primary-hover":"#37c8d9","--secondary-button":"#0a2c3d","--secondary-button-hover":"#0f3a4f","--accent-vibrant":"#3ee8e2","--success-green":"#4de1a4","--error-red":"#ff5c66","--warning-yellow":"#ffcf5c","--text-primary":"#dff4ff","--text-secondary":"#9fd4e6","--text-muted":"#4d7d90","--interactive-hover":"#20b2c4","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#031521","--matrix-rain":"#3ee8e2"}},"sunsetpeach":{"name":"Sunset Peach","vars":{"--background":"#2b1a1f","--foreground":"#ffe8dc","--server-sidebar":"#201316","--channel-sidebar":"#332026","--main-chat-area":"#2b1a1f","--member-list":"#201316","--popups-and-modals":"#332026","--borders-and-separators":"#5c3a3f","--primary-action":"#ff9770","--primary-hover":"#ffab8c","--secondary-button":"#452a30","--secondary-button-hover":"#593640","--accent-vibrant":"#ffc785","--success-green":"#a8d982","--error-red":"#ff6b6b","--warning-yellow":"#ffd166","--text-primary":"#ffe8dc","--text-secondary":"#e0b8ab","--text-muted":"#8c6a63","--interactive-hover":"#ff9770","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#2b1a1f","--matrix-rain":"#ffc785"}},"forestmoss":{"name":"Forest Moss","vars":{"--background":"#1a2419","--foreground":"#e6f1e3","--server-sidebar":"#131b12","--channel-sidebar":"#202d1f","--main-chat-area":"#1a2419","--member-list":"#131b12","--popups-and-modals":"#202d1f","--borders-and-separators":"#3b4f38","--primary-action":"#7fbf6b","--primary-hover":"#94d180","--secondary-button":"#2a3a28","--secondary-button-hover":"#374a34","--accent-vibrant":"#b4d97a","--success-green":"#7fbf6b","--error-red":"#e0655e","--warning-yellow":"#dcbb5c","--text-primary":"#e6f1e3","--text-secondary":"#b6ccb1","--text-muted":"#6b8266","--interactive-hover":"#7fbf6b","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#1a2419","--matrix-rain":"#b4d97a"}},"pastelcloud":{"name":"Pastel Cloud","vars":{"--background":"#f5f0fa","--foreground":"#4a3f5c","--server-sidebar":"#ece2f7","--channel-sidebar":"#f5f0fa","--main-chat-area":"#f5f0fa","--member-list":"#ece2f7","--popups-and-modals":"#f5f0fa","--borders-and-separators":"#dccdec","--primary-action":"#b09aef","--primary-hover":"#c1aef4","--secondary-button":"#e4d6f2","--secondary-button-hover":"#d8c6ec","--accent-vibrant":"#f6a6c1","--success-green":"#8fd6a8","--error-red":"#ef8a9c","--warning-yellow":"#f3d089","--text-primary":"#4a3f5c","--text-secondary":"#786b8c","--text-muted":"#ac9dc0","--interactive-hover":"#b09aef","--hover-overlay":"#00000010","--active-overlay":"#0000001c","--primary-foreground":"#ffffff","--matrix-rain":"#f6a6c1"}},"bloodmoon":{"name":"Blood Moon","vars":{"--background":"#160707","--foreground":"#ffe2e2","--server-sidebar":"#0d0404","--channel-sidebar":"#200a0a","--main-chat-area":"#160707","--member-list":"#0d0404","--popups-and-modals":"#200a0a","--borders-and-separators":"#5c1a1a","--primary-action":"#e0393f","--primary-hover":"#f04c52","--secondary-button":"#2e0f0f","--secondary-button-hover":"#421414","--accent-vibrant":"#ff6b6b","--success-green":"#7fbf6b","--error-red":"#ff2d2d","--warning-yellow":"#e0a13f","--text-primary":"#ffe2e2","--text-secondary":"#d19a9a","--text-muted":"#7a4a4a","--interactive-hover":"#e0393f","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#160707","--matrix-rain":"#ff6b6b"}},"monochrome":{"name":"Monochrome","vars":{"--background":"#141414","--foreground":"#eaeaea","--server-sidebar":"#0d0d0d","--channel-sidebar":"#1a1a1a","--main-chat-area":"#141414","--member-list":"#0d0d0d","--popups-and-modals":"#1a1a1a","--borders-and-separators":"#333333","--primary-action":"#d9d9d9","--primary-hover":"#ffffff","--secondary-button":"#242424","--secondary-button-hover":"#303030","--accent-vibrant":"#bfbfbf","--success-green":"#9ecb9e","--error-red":"#d97a7a","--warning-yellow":"#d9c47a","--text-primary":"#eaeaea","--text-secondary":"#a6a6a6","--text-muted":"#5c5c5c","--interactive-hover":"#d9d9d9","--hover-overlay":"#ffffff0d","--active-overlay":"#ffffff14","--primary-foreground":"#141414","--matrix-rain":"#bfbfbf"}}};
   const BUNDLED_FONTS = [{"id":"default","label":"Default","family":null,"googleName":null},{"id":"inter","label":"Inter","family":"'Inter', sans-serif","googleName":"Inter:wght@400;600;700"},{"id":"poppins","label":"Poppins","family":"'Poppins', sans-serif","googleName":"Poppins:wght@400;600;700"},{"id":"jetbrains","label":"JetBrains Mono","family":"'JetBrains Mono', monospace","googleName":"JetBrains+Mono:wght@400;600;700"},{"id":"comicneue","label":"Comic Neue","family":"'Comic Neue', cursive","googleName":"Comic+Neue:wght@400;700"},{"id":"pressstart","label":"Press Start 2P","family":"'Press Start 2P', system-ui","googleName":"Press+Start+2P"},{"id":"spacemono","label":"Space Mono","family":"'Space Mono', monospace","googleName":"Space+Mono:wght@400;700"},{"id":"couriernew","label":"Courier New","family":"'Courier New', Courier, monospace","googleName":null}];
   const BUNDLED_EFFECTS = [{"id":"none","label":"None"},{"id":"matrix","label":"Matrix — digital rain (--matrix-rain)"},{"id":"rain","label":"Rain — falling streaks (theme accent)"},{"id":"fire","label":"Fire — rising embers (warm / accent)"}];
+
+  async function loadEffects() {
+    if (effectsLoadInFlight) return effectsLoadInFlight;
+
+    effectsLoadInFlight = (async () => {
+      try {
+        const data = BUNDLED_EFFECTS;
+        remoteEffects = data;
+        saveCachedEffects(data);
+        if (!isKnownEffectId(getBackgroundEffect())) setBackgroundEffect('none');
+        if (typeof refreshSettingsPanel === 'function') refreshSettingsPanel();
+        return data;
+      } finally {
+        effectsLoadInFlight = null;
+      }
+    })();
+
+    return effectsLoadInFlight;
+  }
+
   const BUNDLED_VERSION = 76;
-  // Re-check while the tab stays open. ~5m matches GitHub raw CDN cache.
   const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
   let updateCheckResult = null; // { available: bool, latestVersion: string } | null while unknown
@@ -4032,24 +4560,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     return fontsLoadInFlight;
   }
 
-  async function loadEffects() {
-    if (effectsLoadInFlight) return effectsLoadInFlight;
-
-    effectsLoadInFlight = (async () => {
-      try {
-        const data = BUNDLED_EFFECTS;
-        remoteEffects = data;
-        saveCachedEffects(data);
-        if (!isKnownEffectId(getBackgroundEffect())) setBackgroundEffect('none');
-        if (typeof refreshSettingsPanel === 'function') refreshSettingsPanel();
-        return data;
-      } finally {
-        effectsLoadInFlight = null;
-      }
-    })();
-
-    return effectsLoadInFlight;
-  }
 
   function compareVersions(a, b) {
     return a - b;
@@ -4200,7 +4710,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
 
     document.body.appendChild(banner);
 
-    // auto-dismiss after 15s so it doesn't linger forever
     setTimeout(() => {
       if (banner.parentElement) {
         updateToastDismissed = true;
@@ -4513,32 +5022,25 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       html += '<div style="font-size:12px;color:var(--text-muted);font-style:italic;">No roles detected in current view</div>';
       html += '</div>';
     }
-
     html += '<div style="font-size:10px;color:var(--text-muted);text-align:center;border-top:1px solid var(--borders-and-separators);padding-top:10px;font-style:italic;">All data gathered from visible DOM only. No API requests made.</div>';
-
     modal.innerHTML = html;
     modal.appendChild(closeBtn);
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
-
     requestAnimationFrame(function() {
       overlay.style.opacity = '1';
       modal.style.transform = 'scale(1)';
     });
   }
-
   function profilerBuildTooltip(username, targetEl) {
     const tooltip = document.createElement('div');
     tooltip.id = 'fencord-profiler-tooltip';
-
     const avatarSrc = profilerFindAvatar(targetEl);
     const roles = profilerFindAllRoles(username);
     const msgCount = profilerMsgCounter.get(username) || 0;
     const firstSeen = profilerEstimateFirstSeen(username);
     const statusColor = profilerFindStatus(targetEl);
-
     let html = '';
-
     html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">';
     if (avatarSrc) {
       html += '<img src="' + profilerEscapeHtml(avatarSrc) + '" id="fencord-profiler-avatar" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0;cursor:pointer;transition:transform 0.15s;border:2px solid var(--borders-and-separators);" title="Click for full profile">';
@@ -4552,14 +5054,11 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     html += '</div>';
     html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Click avatar for full profile</div>';
     html += '</div></div>';
-
     html += '<div style="border-top:1px solid var(--borders-and-separators);padding-top:10px;display:flex;flex-direction:column;gap:6px;">';
-
     html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">';
     html += '<span style="color:var(--text-muted);">💬 Messages (session)</span>';
     html += '<span style="font-weight:700;color:var(--accent-vibrant);font-variant-numeric:tabular-nums;">' + msgCount + '</span>';
     html += '</div>';
-
     if (firstSeen) {
       const timeStr = firstSeen.toLocaleDateString() + ' ' + firstSeen.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">';
@@ -4567,7 +5066,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       html += '<span style="font-weight:600;color:var(--text-secondary);font-variant-numeric:tabular-nums;">' + profilerEscapeHtml(timeStr) + '</span>';
       html += '</div>';
     }
-
     if (roles.length > 0) {
       html += '<div style="margin-top:4px;">';
       html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">🎭 Roles (' + roles.length + ')</div>';
@@ -4580,12 +5078,9 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       }
       html += '</div></div>';
     }
-
     html += '<div style="font-size:10px;color:var(--text-muted);margin-top:6px;font-style:italic;border-top:1px solid var(--borders-and-separators);padding-top:6px;">Session data only. No API calls.</div>';
     html += '</div>';
-
     tooltip.innerHTML = html;
-
     Object.assign(tooltip.style, {
       position: 'fixed', zIndex: '999999',
       background: 'var(--popups-and-modals)',
@@ -4599,7 +5094,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       transform: 'translateY(6px) scale(0.97)',
       transition: 'opacity 0.18s ease, transform 0.18s ease'
     });
-
     setTimeout(function() {
       const avatarEl = tooltip.querySelector('#fencord-profiler-avatar');
       if (avatarEl) {
@@ -4611,25 +5105,19 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         avatarEl.addEventListener('mouseleave', function() { avatarEl.style.transform = 'scale(1)'; avatarEl.style.borderColor = 'var(--borders-and-separators)'; });
       }
     }, 0);
-
     return tooltip;
   }
-
   function profilerOnMouseEnter(e) {
     const target = e.target;
     if (!target.matches('span.font-semibold.cursor-pointer')) return;
     if (profilerModalOpen) return;
-
     const username = target.textContent.trim();
     if (!username || username.length > 50) return;
-
     if (profilerHideTimer) { clearTimeout(profilerHideTimer); profilerHideTimer = null; }
     if (profilerTooltip) { profilerTooltip.remove(); profilerTooltip = null; }
-
     const tooltip = profilerBuildTooltip(username, target);
     document.body.appendChild(tooltip);
     profilerTooltip = tooltip;
-
     const rect = target.getBoundingClientRect();
     requestAnimationFrame(function() {
       const tooltipRect = tooltip.getBoundingClientRect();
@@ -4645,12 +5133,10 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       tooltip.style.transform = 'translateY(0) scale(1)';
     });
   }
-
   function profilerOnMouseLeave(e) {
     if (!profilerTooltip) return;
     const related = e.relatedTarget;
     if (profilerTooltip.contains(related)) return;
-
     profilerHideTimer = setTimeout(function() {
       if (profilerTooltip) {
         profilerTooltip.style.opacity = '0';
@@ -4661,7 +5147,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       }
     }, 200);
   }
-
   function profilerOnScroll() {
     if (profilerTooltip) {
       profilerTooltip.style.opacity = '0';
@@ -4671,16 +5156,13 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       }, 180);
     }
   }
-
   let profilerMsgObserver = null;
-
   function startProfiler() {
     if (profilerObserver) return;
     profilerMsgObserver = profilerWatchMessages();
     document.addEventListener('mouseenter', profilerOnMouseEnter, true);
     document.addEventListener('mouseleave', profilerOnMouseLeave, true);
     window.addEventListener('scroll', profilerOnScroll, true);
-
     profilerObserver = {
       disconnect: function() {
         document.removeEventListener('mouseenter', profilerOnMouseEnter, true);
@@ -4692,19 +5174,14 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       }
     };
   }
-
   function stopProfiler() {
     if (!profilerObserver) return;
     profilerObserver.disconnect();
     profilerObserver = null;
   }
-
   function initProfiler() {
     if (isProfilerEnabled()) startProfiler();
   }
-
-
-
   const CUSTOM_PLUGIN_KEY = 'fencord-custom-plugin-code';
   const CUSTOM_PLUGIN_ENABLED_KEY = 'fencord-custom-plugin-enabled';
   let customPluginCleanup = null;
@@ -4715,15 +5192,12 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
   const UI_TRANSLATIONS_LANG_KEY = 'fencord-ui-trans-lang';
   let translateMenuObserver = null;
   let uiTranslationInProgress = false;
-
   function isUITranslationEnabled() {
     return localStorage.getItem(UI_TRANSLATE_KEY) === 'true';
   }
-
   function setUITranslationEnabled(enabled) {
     localStorage.setItem(UI_TRANSLATE_KEY, enabled ? 'true' : 'false');
   }
-
   function getUITranslationsCache() {
     try {
       const cache = JSON.parse(localStorage.getItem(UI_TRANSLATIONS_CACHE_KEY) || '{}');
@@ -4733,12 +5207,10 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       return cache;
     } catch (e) { return {}; }
   }
-
   function saveUITranslationsCache(cache) {
     localStorage.setItem(UI_TRANSLATIONS_CACHE_KEY, JSON.stringify(cache));
     localStorage.setItem(UI_TRANSLATIONS_LANG_KEY, getTranslateLang());
   }
-
   function shouldSkipUITranslationNode(node) {
     const parent = node.parentElement;
     if (!parent) return true;
@@ -4753,17 +5225,14 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     if (parent.id === 'fencord-update-toast') return true;
     return false;
   }
-
   async function translateFencordUI() {
     const overlay = document.getElementById('fencord-overlay');
     if (!overlay || uiTranslationInProgress) return;
     if (!isUITranslationEnabled()) return;
     if (overlay.style.display === 'none') return;
-
     uiTranslationInProgress = true;
     const targetLang = getTranslateLang();
     let cache = getUITranslationsCache();
-
     const textNodes = [];
     const walker = document.createTreeWalker(overlay, NodeFilter.SHOW_TEXT, null, false);
     let node;
@@ -4771,16 +5240,13 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       if (shouldSkipUITranslationNode(node)) continue;
       textNodes.push({ node: node, text: node.textContent.trim() });
     }
-
     const uniqueMap = new Map();
     textNodes.forEach(item => {
       if (!uniqueMap.has(item.text)) uniqueMap.set(item.text, []);
       uniqueMap.get(item.text).push(item.node);
     });
-
     const uniqueTexts = Array.from(uniqueMap.keys());
     const toTranslate = uniqueTexts.filter(t => !cache[t]);
-
     if (toTranslate.length > 0) {
       try {
         const results = await Promise.all(
@@ -4795,7 +5261,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         console.warn('[Fencord UI Translate] batch failed:', e);
       }
     }
-
     textNodes.forEach(({ node, text }) => {
       const translated = cache[text];
       if (translated && translated !== text) {
@@ -4803,10 +5268,8 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         if (node.parentElement) node.parentElement.dataset.fencordUiOriginal = text;
       }
     });
-
     uiTranslationInProgress = false;
   }
-
   function revertFencordUITranslation() {
     const overlay = document.getElementById('fencord-overlay');
     if (!overlay) return;
@@ -4820,7 +5283,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       delete el.dataset.fencordUiOriginal;
     });
   }
-
   const TRANSLATE_LANGUAGES = [
     { code: 'ar', label: 'Arabic' },
     { code: 'en', label: 'English' },
@@ -4838,18 +5300,14 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     { code: 'pl', label: 'Polish' },
     { code: 'nl', label: 'Dutch' }
   ];
-
   function isTranslateEnabled() {
     return localStorage.getItem(TRANSLATE_KEY) === 'true';
   }
-
   function translateFencordUI() {
     const overlay = document.getElementById('fencord-overlay');
     if (!overlay || overlay.dataset.fencordTranslating === 'true') return;
     overlay.dataset.fencordTranslating = 'true';
-
     const targetLang = getTranslateLang();
-
     const walker = document.createTreeWalker(
       overlay,
       NodeFilter.SHOW_TEXT,
@@ -4866,13 +5324,11 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       },
       false
     );
-
     const nodes = [];
     let node;
     while ((node = walker.nextNode())) {
       nodes.push({ el: node.parentElement, text: node.textContent.trim() });
     }
-
     nodes.forEach(({ el, text }, index) => {
       el.dataset.fencordUiOriginal = text;
       setTimeout(() => {
@@ -4885,31 +5341,25 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         });
       }, index * 80);
     });
-
     setTimeout(() => {
       delete overlay.dataset.fencordTranslating;
     }, nodes.length * 80 + 2000);
   }
-
   function setTranslateEnabled(enabled) {
     localStorage.setItem(TRANSLATE_KEY, enabled ? 'true' : 'false');
     if (enabled) startTranslate();
     else stopTranslate();
   }
-
   function getTranslateLang() {
     return localStorage.getItem(TRANSLATE_LANG_KEY) || 'ar';
   }
-
   function setTranslateLang(code) {
     localStorage.setItem(TRANSLATE_LANG_KEY, code);
   }
-
   function getLangLabel(code) {
     const found = TRANSLATE_LANGUAGES.find(l => l.code === code);
     return found ? found.label : code;
   }
-
   function doGMTranslate(text, targetLang) {
     return new Promise((resolve) => {
       const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' + targetLang + '&dt=t&q=' + encodeURIComponent(text);
@@ -4918,7 +5368,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         resolve({ ok: false, error: 'GM API missing', text: null, sourceLang: null });
         return;
       }
-
       GM_xmlhttpRequest({
         method: 'GET',
         url: url,
@@ -4962,13 +5411,11 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       });
     });
   }
-
   function openTranslatePopup(text, targetLang) {
     const encoded = encodeURIComponent(text);
     const url = `https://translate.google.com/?sl=auto&tl=${targetLang}&text=${encoded}&op=translate`;
     window.open(url, '_blank', 'width=900,height=650,noopener,noreferrer');
   }
-
   function extractMessageText(el) {
     let fullText = '';
     try {
@@ -4988,7 +5435,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     } catch (e) {}
     return fullText;
   }
-
   function getMessageTextRect(msgEl) {
     let bestEl = null;
     let bestLen = 0;
@@ -5010,14 +5456,11 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
   function showTranslateOverlay(msgEl, translated, sourceLang, targetLang) {
     const existing = document.getElementById('fencord-translate-overlay');
     if (existing) existing.remove();
-
     const rect = getMessageTextRect(msgEl);
     const overlay = document.createElement('div');
     overlay.id = 'fencord-translate-overlay';
-
     const sourceName = getLangLabel(sourceLang);
     const targetName = getLangLabel(targetLang);
-
     const header = document.createElement('div');
     header.textContent = `🌐  ${sourceName} → ${targetName}`;
     Object.assign(header.style, {
@@ -5032,7 +5475,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       gap: '6px',
       letterSpacing: '0.3px'
     });
-
     const body = document.createElement('div');
     body.textContent = translated;
     Object.assign(body.style, {
@@ -5045,7 +5487,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       overflowY: 'auto',
       overflowX: 'hidden'
     });
-
     const hint = document.createElement('div');
     hint.textContent = 'Click anywhere to dismiss';
     Object.assign(hint.style, {
@@ -5055,16 +5496,13 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       textAlign: 'right',
       fontStyle: 'italic'
     });
-
     overlay.appendChild(header);
     overlay.appendChild(body);
     overlay.appendChild(hint);
-
     const isLong = translated.length > 120;
     const overlayWidth = isLong ? 520 : Math.max(rect.width + 8, 320);
     let left = isLong ? (window.innerWidth - overlayWidth) / 2 : rect.left;
     let top = isLong ? 100 : rect.top - 4;
-
     Object.assign(overlay.style, {
       position: 'fixed',
       left: left + 'px',
@@ -5084,14 +5522,11 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       pointerEvents: 'auto',
       cursor: 'default'
     });
-
     document.documentElement.appendChild(overlay);
-
     requestAnimationFrame(() => {
       overlay.style.opacity = '1';
       overlay.style.transform = 'translateY(0)';
     });
-
     const autoHide = (e) => {
       if (!overlay.contains(e.target)) {
         overlay.style.opacity = '0';
@@ -5106,13 +5541,11 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       document.addEventListener('scroll', autoHide, true);
     }, 50);
   }
-
   function isFenridContextMenu(el) {
     if (!el || el.nodeType !== 1) return false;
     const txt = el.textContent || '';
     return txt.includes('Copy Text') && (txt.includes('Reply') || txt.includes('Delete Message'));
   }
-
   function findMenuItemByText(menuEl, text) {
     const items = menuEl.querySelectorAll('div, button, span, a');
     for (let i = 0; i < items.length; i++) {
@@ -5121,12 +5554,9 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     }
     return null;
   }
-
   function createNativeMenuRow({ icon, label, onClick, borderTop }) {
     const row = document.createElement('div');
     row.dataset.fencordTranslateRow = 'true';
-
-    // Icon
     const iconEl = document.createElement('span');
     iconEl.textContent = icon;
     Object.assign(iconEl.style, {
@@ -5136,8 +5566,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       flexShrink: '0',
       lineHeight: '1'
     });
-
-    // Label
     const labelEl = document.createElement('span');
     labelEl.textContent = label;
     Object.assign(labelEl.style, {
@@ -5145,10 +5573,8 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       fontSize: '13px',
       fontWeight: '500'
     });
-
     row.appendChild(iconEl);
     row.appendChild(labelEl);
-
     Object.assign(row.style, {
       display: 'flex',
       alignItems: 'center',
@@ -5163,27 +5589,22 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       opacity: '1',
       backgroundColor: 'transparent'
     });
-
     row.onmouseenter = () => {
       row.style.backgroundColor = 'var(--hover-overlay, rgba(255,255,255,0.05))';
     };
     row.onmouseleave = () => {
       row.style.backgroundColor = 'transparent';
     };
-
     row.addEventListener('click', onClick);
     return row;
   }
-
   function injectTranslateRow(menuEl, msgEl, text) {
     if (!menuEl || !msgEl) return;
     if (menuEl.querySelector('[data-fencord-translate-row]')) return;
-
     const targetLang = getTranslateLang();
     const isTranslated = !!msgEl.dataset.fencordTranslatedMessage;
     const copyTextItem = findMenuItemByText(menuEl, 'Copy Text');
     const copyLinkItem = findMenuItemByText(menuEl, 'Copy Link');
-
     const row = createNativeMenuRow({
       icon: '🌐',
       label: isTranslated ? 'Show Original' : 'Translate Message',
@@ -5191,11 +5612,8 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       onClick: async (ev) => {
         ev.stopPropagation();
         ev.preventDefault();
-
         row.remove();
-
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-
         if (isTranslated) {
           delete msgEl.dataset.fencordTranslatedMessage;
           const existingOverlay = document.getElementById('fencord-translate-overlay');
@@ -5203,10 +5621,8 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
           showToast('Restored original', { color: 'var(--text-muted)', duration: 1500 });
           return;
         }
-
         showToast('Translating...', { color: 'var(--primary-action)', duration: 3000 });
         const result = await doGMTranslate(text, targetLang);
-
         if (result.ok && result.text) {
           msgEl.dataset.fencordTranslatedMessage = 'true';
           showTranslateOverlay(msgEl, result.text, result.sourceLang, targetLang);
@@ -5218,7 +5634,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         }
       }
     });
-
     if (copyTextItem && copyLinkItem) {
       menuEl.insertBefore(row, copyLinkItem);
     } else if (copyTextItem && copyTextItem.nextElementSibling) {
@@ -5231,16 +5646,12 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       menuEl.appendChild(row);
     }
   }
-
   function onTranslateContextMenu(e) {
     if (!isTranslateEnabled()) return;
-
     const msgEl = e.target.closest?.('[class*="message"], [data-message], .message, .msg, [class*="group"]');
     if (!msgEl) return;
-
     const text = extractMessageText(msgEl);
     if (!text || text.length < 2) return;
-
     const allDivs = document.querySelectorAll('div');
     for (let i = allDivs.length - 1; i >= Math.max(0, allDivs.length - 15); i--) {
       if (isFenridContextMenu(allDivs[i])) {
@@ -5248,12 +5659,10 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         return;
       }
     }
-
     if (translateMenuObserver) {
       translateMenuObserver.disconnect();
       translateMenuObserver = null;
     }
-
     let found = false;
     translateMenuObserver = new MutationObserver((mutations) => {
       if (found) return;
@@ -5284,9 +5693,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
         }
       }
     });
-
     translateMenuObserver.observe(document.body, { childList: true, subtree: true });
-
     setTimeout(() => {
       if (translateMenuObserver) {
         translateMenuObserver.disconnect();
@@ -5294,11 +5701,9 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       }
     }, 500);
   }
-
   function startTranslate() {
     document.addEventListener('contextmenu', onTranslateContextMenu, true);
   }
-
   function stopTranslate() {
     document.removeEventListener('contextmenu', onTranslateContextMenu, true);
     if (translateMenuObserver) {
@@ -5306,11 +5711,7 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       translateMenuObserver = null;
     }
   }
-
-
-
   const DANGEROUS_PATTERNS = [
-
     { pattern: /fetch\s*\(/gi, name: 'fetch() — network requests', severity: 'high' },
     { pattern: /XMLHttpRequest/gi, name: 'XMLHttpRequest', severity: 'high' },
     { pattern: /WebSocket/gi, name: 'WebSocket', severity: 'high' },
@@ -5320,8 +5721,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     { pattern: /navigator\.sendBeacon|navigator\.connection/gi, name: 'network/connection introspection', severity: 'medium' },
     { pattern: /import\s*\(/gi, name: 'dynamic import()', severity: 'high' },
     { pattern: /require\s*\(/gi, name: 'require()', severity: 'high' },
-
-
     { pattern: /eval\s*\(/gi, name: 'eval()', severity: 'high' },
     { pattern: /Function\s*\(/gi, name: 'Function() constructor', severity: 'high' },
     { pattern: /setTimeout\s*\(\s*["'`]/gi, name: 'setTimeout with a string (implicit eval)', severity: 'high' },
@@ -5330,8 +5729,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     { pattern: /String\.fromCharCode/gi, name: 'String.fromCharCode (common obfuscation trick)', severity: 'medium' },
     { pattern: /\\x[0-9a-f]{2}(\\x[0-9a-f]{2}){5,}/gi, name: 'hex-escaped string blob (obfuscated payload)', severity: 'medium' },
     { pattern: /\[\s*["']constructor["']\s*\]/gi, name: 'accessing .constructor via brackets (sandbox-escape trick)', severity: 'high' },
-
-
     { pattern: /document\.cookie/gi, name: 'document.cookie access', severity: 'high' },
     { pattern: /localStorage\s*\.\s*getItem/gi, name: 'reading localStorage (may target tokens/session data)', severity: 'medium' },
     { pattern: /localStorage\.clear\s*\(/gi, name: 'localStorage.clear()', severity: 'high' },
@@ -5340,20 +5737,14 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     { pattern: /navigator\.credentials/gi, name: 'Credential Management API', severity: 'high' },
     { pattern: /\btoken\b|\bpassword\b|\bwebhook\b/gi, name: "references to 'token' / 'password' / 'webhook'", severity: 'medium' },
     { pattern: /discord(app)?\.com\/api\/webhooks/gi, name: 'Discord webhook URL (classic exfil vector)', severity: 'high' },
-
-
     { pattern: /navigator\.clipboard/gi, name: 'clipboard read/write access', severity: 'high' },
     { pattern: /addEventListener\s*\(\s*["']key(down|up|press)["']/gi, name: 'keystroke listener (possible keylogger)', severity: 'medium' },
     { pattern: /addEventListener\s*\(\s*["']paste["']/gi, name: 'paste event listener', severity: 'medium' },
-
-
     { pattern: /document\.write/gi, name: 'document.write', severity: 'high' },
     { pattern: /location\s*(=|\.href\s*=|\.replace\s*\()/gi, name: 'page redirect (location change)', severity: 'high' },
     { pattern: /window\.open/gi, name: 'window.open', severity: 'medium' },
     { pattern: /<\s*script/gi, name: 'injecting a <script> tag', severity: 'high' },
     { pattern: /<\s*iframe/gi, name: 'injecting an <iframe>', severity: 'medium' },
-
-
     { pattern: /chrome\s*\./gi, name: 'Chrome extension API', severity: 'high' },
     { pattern: /\bbrowser\s*\.\s*(runtime|storage|tabs|extension)/gi, name: 'browser extension API', severity: 'high' },
     { pattern: /GM_[A-Za-z]+/gi, name: 'Greasemonkey/Tampermonkey privileged API', severity: 'high' },
@@ -5361,7 +5752,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     { pattern: /prototype\s*\.\s*__/gi, name: 'prototype pollution attempt', severity: 'high' },
     { pattern: /top\s*\.\s*(location|postMessage)|parent\s*\.\s*(location|postMessage)/gi, name: 'reaching into top/parent frame', severity: 'medium' },
   ];
-
   function scanForSuspiciousBlobs(code) {
     const issues = [];
     const blob = code.match(/[A-Za-z0-9+/]{80,}={0,2}/g);
@@ -5370,26 +5760,18 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     }
     return issues;
   }
-
-
   let contextMenuEl = null;
-
   function profilerShowRolesContextMenu(username, x, y) {
     if (contextMenuEl) { contextMenuEl.remove(); contextMenuEl = null; }
-
     const roles = profilerFindAllRoles(username);
     const msgCount = profilerMsgCounter.get(username) || 0;
-
     const menu = document.createElement('div');
     menu.id = 'fencord-context-menu';
-
     let html = '';
-
     html += '<div style="padding:10px 14px;border-bottom:1px solid var(--borders-and-separators);font-weight:700;font-size:13px;color:var(--text-primary);display:flex;align-items:center;gap:8px;">';
     html += '<span style="font-size:14px;">🎭</span>';
     html += profilerEscapeHtml(username);
     html += '</div>';
-
     if (roles.length > 0) {
       html += '<div style="padding:10px 14px;">';
       html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;font-weight:600;">Roles (' + roles.length + ')</div>';
@@ -5404,14 +5786,11 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     } else {
       html += '<div style="padding:10px 14px;font-size:12px;color:var(--text-muted);font-style:italic;">No roles detected</div>';
     }
-
     html += '<div style="padding:8px 14px;border-top:1px solid var(--borders-and-separators);display:flex;justify-content:space-between;align-items:center;">';
     html += '<span style="font-size:11px;color:var(--text-muted);">💬 Messages</span>';
     html += '<span style="font-size:12px;font-weight:700;color:var(--accent-vibrant);">' + msgCount + '</span>';
     html += '</div>';
-
     menu.innerHTML = html;
-
     Object.assign(menu.style, {
       position: 'fixed',
       zIndex: '1000006',
@@ -5428,7 +5807,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       transform: 'scale(0.95)',
       transition: 'opacity 0.12s ease, transform 0.12s ease'
     });
-
     document.body.appendChild(menu);
     contextMenuEl = menu;
     const rect = menu.getBoundingClientRect();
@@ -5437,16 +5815,13 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     if (left + rect.width > window.innerWidth - 10) left = window.innerWidth - rect.width - 10;
     if (top + rect.height > window.innerHeight - 10) top = y - rect.height;
     if (top < 10) top = 10;
-
     menu.style.left = left + 'px';
     menu.style.top = top + 'px';
-
     requestAnimationFrame(function() {
       menu.style.opacity = '1';
       menu.style.transform = 'scale(1)';
     });
   }
-
   function profilerHideContextMenu() {
     if (contextMenuEl) {
       contextMenuEl.style.opacity = '0';
@@ -5456,34 +5831,27 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       }, 120);
     }
   }
-
   function profilerOnContextMenu(e) {
     const target = e.target;
     const usernameEl = target.closest('span.font-semibold.cursor-pointer');
     if (!usernameEl) return;
-
     e.preventDefault();
     e.stopPropagation();
-
     const username = usernameEl.textContent.trim();
     if (!username) return;
-
     profilerShowRolesContextMenu(username, e.clientX, e.clientY);
   }
-
   function profilerOnDocumentClick(e) {
     if (contextMenuEl && !contextMenuEl.contains(e.target)) {
       profilerHideContextMenu();
     }
   }
-
   const _originalStartProfiler = startProfiler;
   startProfiler = function() {
     _originalStartProfiler();
     document.addEventListener('contextmenu', profilerOnContextMenu, true);
     document.addEventListener('click', profilerOnDocumentClick, true);
   };
-
   const _originalStopProfiler = stopProfiler;
   stopProfiler = function() {
     _originalStopProfiler();
@@ -5491,8 +5859,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     document.removeEventListener('click', profilerOnDocumentClick, true);
     profilerHideContextMenu();
   };
-
-
   function scanCustomPlugin(code) {
     const found = [];
     for (let i = 0; i < DANGEROUS_PATTERNS.length; i++) {
@@ -5503,35 +5869,28 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       }
     }
     found.push(...scanForSuspiciousBlobs(code));
-
     const high = found.filter(f => f.severity === 'high');
     const medium = found.filter(f => f.severity === 'medium');
     return { high, medium, all: found, blocked: high.length > 0 };
   }
-
   function getCustomPluginCode() {
     return localStorage.getItem(CUSTOM_PLUGIN_KEY) || '';
   }
-
   function saveCustomPluginCode(code) {
     localStorage.setItem(CUSTOM_PLUGIN_KEY, code);
   }
-
   function isCustomPluginEnabled() {
     return localStorage.getItem(CUSTOM_PLUGIN_ENABLED_KEY) === 'true';
   }
-
   function setCustomPluginEnabled(enabled) {
     localStorage.setItem(CUSTOM_PLUGIN_ENABLED_KEY, enabled ? 'true' : 'false');
     if (enabled) runCustomPlugin();
     else stopCustomPlugin();
   }
-
   function runCustomPlugin() {
     stopCustomPlugin();
     const code = getCustomPluginCode();
     if (!code.trim()) return;
-
     const scan = scanCustomPlugin(code);
     if (scan.blocked) {
       alert('Custom plugin blocked!\n\nDangerous patterns found:\n• ' + scan.high.map(i => i.name).join('\n• ') + '\n\nRemove these and try again.');
@@ -5539,7 +5898,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       if (typeof refreshSettingsPanel === 'function') refreshSettingsPanel();
       return;
     }
-
     try {
       const wrapped = '(function() { "use strict"; const console = window.console; const document = window.document; const MutationObserver = window.MutationObserver; const setTimeout = window.setTimeout; const setInterval = window.setInterval; const clearTimeout = window.clearTimeout; const clearInterval = window.clearInterval; ' + code + ' })();';
       const fn = new Function(wrapped);
@@ -5553,28 +5911,20 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       if (typeof refreshSettingsPanel === 'function') refreshSettingsPanel();
     }
   }
-
   function stopCustomPlugin() {
     if (customPluginCleanup) {
       try { customPluginCleanup(); } catch (e) {}
       customPluginCleanup = null;
     }
   }
-
   function initCustomPlugin() {
     if (isCustomPluginEnabled()) runCustomPlugin();
   }
-
-
-
   function fencordProtectBlockedCount() {
     return (typeof window.__fencordShieldBlockedCount === 'function')
       ? window.__fencordShieldBlockedCount()
       : 0;
   }
-
-
-
   const FAVORITE_PLUGINS_KEY = 'fencord-favorite-plugins';
   let favStyleInjected = false;
 
@@ -5593,20 +5943,16 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     `;
     document.head.appendChild(style);
   }
-
   function getFavoritePlugins() {
     try { return JSON.parse(localStorage.getItem(FAVORITE_PLUGINS_KEY) || '[]'); }
     catch (e) { return []; }
   }
-
   function saveFavoritePlugins(list) {
     localStorage.setItem(FAVORITE_PLUGINS_KEY, JSON.stringify(list));
   }
-
   function isPluginFavorited(title) {
     return getFavoritePlugins().includes(title);
   }
-
   function togglePluginFavorite(title) {
     const list = getFavoritePlugins();
     const idx = list.indexOf(title);
@@ -5615,7 +5961,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     saveFavoritePlugins(list);
     return true;
   }
-
   function favBuildStar(title) {
     favInjectStyle();
     const star = document.createElement('span');
@@ -5640,13 +5985,10 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     });
     return star;
   }
-
   const USERNAME_HIDER_KEY = 'fencord-username-hider-mode';
   const ALLOWED_HIDER_MODES = new Set(['off', 'mine', 'others', 'both']);
   let usernameHiderInterval = null;
-
   const HIDER_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
-
   function randomScramble(length) {
     let out = '';
     for (let i = 0; i < length; i++) {
@@ -5654,30 +5996,24 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     }
     return out;
   }
-
   function getUsernameHiderMode() {
     const v = localStorage.getItem(USERNAME_HIDER_KEY) || 'off';
     return ALLOWED_HIDER_MODES.has(v) ? v : 'off';
   }
-
   function saveUsernameHiderMode(mode) {
     localStorage.setItem(USERNAME_HIDER_KEY, ALLOWED_HIDER_MODES.has(mode) ? mode : 'off');
   }
-
   function tickUsernameHider() {
     try {
       const mode = getUsernameHiderMode();
       if (mode === 'off') return;
-
       const myName = getMyRealUsername();
-
       document.querySelectorAll('span.font-semibold.cursor-pointer').forEach(el => {
         if (!el.dataset.fencordHiderOriginal) {
           el.dataset.fencordHiderOriginal = el.textContent.trim();
         }
         const original = el.dataset.fencordHiderOriginal;
         const isMe = myName && original === myName;
-
         const shouldHide =
           mode === 'both' ||
           (mode === 'mine' && isMe) ||
@@ -5693,7 +6029,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       });
     } catch (e) {}
   }
-
   function revertUsernameHider() {
     document.querySelectorAll('[data-fencord-hider-original]').forEach(el => {
       el.textContent = el.dataset.fencordHiderOriginal;
@@ -5701,47 +6036,55 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
       delete el.dataset.fencordHiderActive;
     });
   }
-
   function setUsernameHiderMode(mode) {
     const clean = ALLOWED_HIDER_MODES.has(mode) ? mode : 'off';
     saveUsernameHiderMode(clean);
     revertUsernameHider();
-
     if (clean === 'off') {
       if (usernameHiderInterval) { clearInterval(usernameHiderInterval); usernameHiderInterval = null; }
       return;
     }
-
     tickUsernameHider();
-
     if (!usernameHiderInterval) {
       usernameHiderInterval = setInterval(tickUsernameHider, 1500);
     }
   }
-
   function initUsernameHider() {
     const mode = getUsernameHiderMode();
     if (mode !== 'off') setUsernameHiderMode(mode);
   }
-
   function init() {
     if (window.__fencordInitialized) return;
     Object.defineProperty(window, '__fencordInitialized', { value: true, enumerable: false, configurable: true });
-
     applyTheme(getSavedTheme());
     initFont();
     watchForSettingsButton();
+    setInterval(() => {
+      const existing = document.getElementById('fencord-btn');
+      if (existing && existing.isConnected) return;
+      const rows = document.querySelectorAll('button, a, [role="button"], li');
+      for (let i = 0; i < rows.length; i++) {
+        const el = rows[i];
+        if (el.childElementCount > 6) continue;
+        if (el.textContent.replace(/\s+/g, ' ').trim() === 'Connections') {
+          createSettingsUI();
+          return;
+        }
+      }
+    }, 1000);
     loadThemes();
     loadFonts();
     loadEffects();
     tryDetectRealUsername();
     if (isRgbEnabled()) setRgbEnabled(true);
+    initSurgeBypass();
     if (getDisplayNameOverride()) setDisplayNameEnabled(true);
     initTimestampFormat();
     if (isImageBlurEnabled()) setImageBlurEnabled(true);
     if (isSoftTapsEnabled()) setSoftTapsEnabled(true);
     setBackgroundEffect(getBackgroundEffect());
     if (isCallTimerEnabled()) setCallTimerEnabled(true);
+    initClockTime();
     initUsernameHider();
     initCustomPlugin();
     if (isTranslateEnabled()) startTranslate();
@@ -5749,7 +6092,6 @@ window.dispatchEvent(new CustomEvent('fencord:blocked'));
     startUpdateChecker();
     showBootDisclaimerToast();
   }
-
   if (document.body) {
     init();
   } else {
